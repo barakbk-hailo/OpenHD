@@ -1,0 +1,74 @@
+name: build_image_rpi5
+
+on:
+  push:
+    branches: ["2.6-evo-hailo"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 512
+        swap-size-mb: 1024
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        overprovision-lvm: 'true'
+
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Clone SysUtils
+      uses: actions/checkout@v4
+      with:
+        repository: barakbk-hailo/OpenHD-SysUtils
+        path: ../OpenHD-SysUtils
+
+    - name: Build image (setup + compile)
+      run: sudo ./build_rpi_cross.sh setup && sudo ./build_rpi_cross.sh build
+
+    - name: Build WiFi driver in chroot
+      run: |
+        MOUNT_DIR=".rpi-build/mnt"
+        PI_KVER=$(ls "$MOUNT_DIR/lib/modules/" | sort -V | tail -1)
+        sudo chroot "$MOUNT_DIR" /bin/bash -c "
+          apt-get install -y --no-install-recommends linux-headers-${PI_KVER} || true
+          git clone https://github.com/barakbk-hailo/rtl88x2bu.git /tmp/rtl88x2bu
+          cd /tmp/rtl88x2bu
+          make -j\$(nproc) KVER=${PI_KVER}
+          make install KVER=${PI_KVER}
+          depmod -a ${PI_KVER}
+          echo 'blacklist rtw88_8822bu' > /etc/modprobe.d/rtw8822bu.conf
+          rm -rf /tmp/rtl88x2bu
+        "
+
+    - name: Save image
+      run: sudo ./build_rpi_cross.sh image
+
+    - name: Compress image
+      run: xz -T0 -3 openhd-rpi5.img
+
+    - name: Upload image
+      uses: actions/upload-artifact@v4
+      with:
+        name: openhd-rpi5-image
+        path: openhd-rpi5.img.xz
+        if-no-files-found: error
+
+    - name: Upload binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: openhd-rpi5-binaries
+        path: |
+          openhd-arm
+          openhd_sys_utils-arm
+        if-no-files-found: warn
+
+    - name: Unmount
+      if: always()
+      run: sudo ./build_rpi_cross.sh unmount
