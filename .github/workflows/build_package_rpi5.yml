@@ -1,4 +1,4 @@
-name: build_image_rpi5
+name: build_package_rpi5
 
 on:
   push:
