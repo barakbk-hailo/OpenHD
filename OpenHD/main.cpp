@@ -239,8 +239,6 @@ int main(int argc, char *argv[]) {
   openhd::generateSettingsDirectoryIfNonExists();
   const auto platform = OHDPlatform::instance();
   openhd::LEDManager::instance().set_status_loading();
-  // Generate the keys and delete pw if needed
-  OHDInterface::generate_keys_from_pw_if_exists_and_delete();
   // Parse the program arguments
   // This is the console we use inside main, in general different openhd
   // modules/classes have their own loggers with different tags
@@ -262,6 +260,9 @@ int main(int argc, char *argv[]) {
     if (openhd::ButtonManager::instance().user_wants_reset_openhd_core()) {
       openhd::clean_all_settings();
     }
+    // Generate the keys AFTER clean_all_settings so --clean-start doesn't
+    // wipe the freshly generated key
+    OHDInterface::generate_keys_from_pw_if_exists_and_delete();
     // Profile no longer depends on n discovered cameras,
     // But if we are air, we have at least one camera, sw if no camera was found
     const auto profile = DProfile::discover(options.run_as_air);

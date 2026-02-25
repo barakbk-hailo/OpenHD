@@ -78,7 +78,13 @@ AirCameraGenericSettings AirCameraGenericSettingsHolder::create_default()
   ret.primary_camera_type = X_CAM_TYPE_DUMMY_SW;
   ret.secondary_camera_type = X_CAM_TYPE_DISABLED;
 
-  if (OHDPlatform::instance().is_rpi()) {
+  if (OHDPlatform::instance().is_rpi5()) {
+    // RPI5 has no MMAL - check image writer config, fall back to libcamera
+    ret.primary_camera_type = rpi_get_default_primary_cam_type();
+    if (ret.primary_camera_type == X_CAM_TYPE_RPI_MMAL_HDMI_TO_CSI) {
+      ret.primary_camera_type = X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V2_IMX219;
+    }
+  } else if (OHDPlatform::instance().is_rpi()) {
     ret.primary_camera_type = rpi_get_default_primary_cam_type();
   } else if (OHDPlatform::instance().is_x20()) {
     ret.primary_camera_type = openhd::x20::detect_camera_type();

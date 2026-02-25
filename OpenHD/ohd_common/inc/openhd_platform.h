@@ -41,7 +41,7 @@ static constexpr int X_PLATFORM_TYPE_X86 = 1;
 static constexpr int X_PLATFORM_TYPE_RPI_OLD = 10;
 static constexpr int X_PLATFORM_TYPE_RPI_4 = 11;
 static constexpr int X_PLATFORM_TYPE_RPI_CM4 = 12;
-static constexpr int X_PLATFORM_TYPE_RPI_5 = 12;
+static constexpr int X_PLATFORM_TYPE_RPI_5 = 13;
 
 // Numbers 20..30 are reserved for rockchip
 static constexpr int X_PLATFORM_TYPE_ROCKCHIP_RK3566_RADXA_ZERO3W =
@@ -99,6 +99,7 @@ struct OHDPlatform {
   // qualcomm
   bool is_qrb5165() const;
   bool is_qcs405() const;
+  bool is_rpi5() const;
   bool is_willy() const;
 };
 

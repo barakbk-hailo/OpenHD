@@ -23,7 +23,9 @@
 
 #include "wifi_hotspot.h"
 
+#include <chrono>
 #include <iostream>
+#include <thread>
 #include <utility>
 
 #include "openhd_spdlog.h"
@@ -101,6 +103,12 @@ WifiHotspot::~WifiHotspot() { util_delete_nm_file(); }
 
 void WifiHotspot::start() {
   m_console->debug("Starting WIFI hotspot on card {}", m_wifi_card.device_name);
+  // Ensure WiFi radio is enabled in NetworkManager (may be persisted as
+  // disabled in /var/lib/NetworkManager/NetworkManager.state)
+  OHDUtil::run_command("nmcli", {"radio", "wifi", "on"});
+  // Bring the interface up so NM sees it as available
+  OHDUtil::run_command("ip", {"link", "set", m_wifi_card.device_name, "up"});
+  std::this_thread::sleep_for(std::chrono::seconds(1));
   const auto args =
       std::vector<std::string>{"con", "up", OHD_WIFI_HOTSPOT_CONNECTION_NAME};
   OHDUtil::run_command("nmcli", args);

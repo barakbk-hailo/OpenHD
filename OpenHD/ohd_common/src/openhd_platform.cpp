@@ -72,9 +72,25 @@ static int internal_discover_platform() {
     }
 
     openhd::log::get_default()->warn("Checking Raspberry Pi hardware...");
+    if (OHDUtil::contains(proc_cpuinfo_opt.value(), "BCM2712")) {
+      openhd::log::get_default()->warn("Raspberry Pi 5 detected.");
+      return X_PLATFORM_TYPE_RPI_5;
+    }
     if (OHDUtil::contains(proc_cpuinfo_opt.value(), "BCM2711")) {
       openhd::log::get_default()->warn("Raspberry Pi 4 detected.");
       return X_PLATFORM_TYPE_RPI_4;
+    }
+
+    // Also check device-tree model for Pi 5 (some kernels may not show BCM2712
+    // in cpuinfo)
+    if (OHDFilesystemUtil::exists("/proc/device-tree/model")) {
+      const std::string model =
+          OHDFilesystemUtil::read_file("/proc/device-tree/model");
+      if (OHDUtil::contains(model, "Raspberry Pi 5")) {
+        openhd::log::get_default()->warn(
+            "Raspberry Pi 5 detected via device-tree.");
+        return X_PLATFORM_TYPE_RPI_5;
+      }
     }
 
     openhd::log::get_default()->warn("Detected an older Raspberry Pi (<=3).");
@@ -255,7 +271,8 @@ int get_fec_max_block_size_for_platform() {
   auto platform_type = OHDPlatform::instance().platform_type;
 
   if (platform_type == X_PLATFORM_TYPE_RPI_4 ||
-      platform_type == X_PLATFORM_TYPE_RPI_CM4) {
+      platform_type == X_PLATFORM_TYPE_RPI_CM4 ||
+      platform_type == X_PLATFORM_TYPE_RPI_5) {
     return 50;
   }
   if (platform_type == X_PLATFORM_TYPE_RPI_OLD) {
@@ -315,6 +332,10 @@ bool OHDPlatform::is_rpi_or_x86() const {
 
 bool OHDPlatform::is_x20() const {
   return platform_type == X_PLATFORM_TYPE_ALWINNER_X20;
+}
+
+bool OHDPlatform::is_rpi5() const {
+  return platform_type == X_PLATFORM_TYPE_RPI_5;
 }
 
 bool OHDPlatform::is_willy() const {

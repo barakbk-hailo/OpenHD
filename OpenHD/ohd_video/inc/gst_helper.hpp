@@ -474,6 +474,8 @@ static std::string createLibcamerasrcStream(const CameraSettings& settings) {
         settings.streamed_video_format.framerate);
     if (settings.force_sw_encode) {
       openhd::log::get_default()->warn("Forced SW encode");
+      // Convert NV12 from libcamera ISP to I420 for x264enc
+      ss << "videoconvert ! queue ! video/x-raw, format=I420 ! ";
       ss << createSwEncoder(settings);
     } else {
       // We got rid of the v4l2convert - see

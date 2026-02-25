@@ -239,6 +239,15 @@ class CameraHolder :
     ret.streamed_video_format.width = default_resolution.width_px;
     ret.streamed_video_format.height = default_resolution.height_px;
     ret.streamed_video_format.framerate = default_resolution.fps;
+    if (OHDPlatform::instance().is_rpi5()) {
+      // RPI5 has no HW encoder - force software encode with conservative
+      // settings to avoid overloading the CPU
+      ret.force_sw_encode = true;
+      ret.streamed_video_format.width = 640;
+      ret.streamed_video_format.height = 480;
+      ret.streamed_video_format.framerate = 30;
+      ret.h26x_bitrate_kbits = 3000;
+    }
     if (OHDPlatform::instance().is_x20()) {
       // Better choice for the x20
       ret.h26x_keyframe_interval = 8;
