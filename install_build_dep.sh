@@ -40,6 +40,10 @@ function install_x86_packages {
 PLATFORM_PACKAGES="libunwind-dev gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly"
 PLATFORM_PACKAGES_REMOVE=""
 }
+function install_pi5_packages {
+PLATFORM_PACKAGES="libcamera-dev"
+PLATFORM_PACKAGES_REMOVE=""
+}
 function install_rock_packages {
 PLATFORM_PACKAGES="libpoco-dev gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly"
 PLATFORM_PACKAGES_REMOVE=""
@@ -56,6 +60,8 @@ PLATFORM_PACKAGES_REMOVE=""
  
  if [[ "${PLATFORM}" == "rpi" ]]; then
     install_pi_packages
+ elif [[ "${PLATFORM}" == "rpi5" ]]; then
+    install_pi5_packages
  elif [[ "${PLATFORM}" == "ubuntu-x86" ]] ; then
     install_x86_packages
  elif [[ "${PLATFORM}" == "rock5" ]] ; then
