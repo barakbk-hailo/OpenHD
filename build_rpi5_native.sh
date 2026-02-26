@@ -69,6 +69,10 @@ cmd_build() {
     cp "$SCRIPT_DIR/systemd/openhd_rpi.service" /etc/systemd/system/openhd.service
     systemctl enable openhd.service 2>/dev/null || true
 
+    # Install default config file
+    mkdir -p /boot/openhd
+    cp "$SCRIPT_DIR/OpenHD/ohd_common/config/hardware.config" /boot/openhd/hardware.config
+
     echo ""
     echo "=== Build complete! Binary installed to /usr/local/bin/openhd ==="
 }

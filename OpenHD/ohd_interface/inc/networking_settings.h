@@ -48,7 +48,7 @@ static constexpr auto ETHERNET_OPERATING_MODE_EXTERNAL_DEVICE = 2;
 // Networking related settings, separate from wb_link
 struct NetworkingSettings {
   // Only used if a wifi hotspot card has been found
-  int wifi_hotspot_mode = WIFI_HOTSPOT_AUTO;
+  int wifi_hotspot_mode = WIFI_HOTSPOT_ALWAYS_OFF;
   // Ethernet operating mode (changes networking,might require reboot)
   int ethernet_operating_mode = ETHERNET_OPERATING_MODE_UNTOUCHED;
 };
