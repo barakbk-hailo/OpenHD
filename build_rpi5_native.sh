@@ -16,7 +16,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SYSUTILS_DIR="/opt/OpenHD-SysUtils"
+SYSUTILS_DIR="/home/openhd/proj/OpenHD-SysUtils"
 
 cmd_deps() {
     echo "=== Installing build + runtime dependencies ==="
@@ -83,7 +83,7 @@ cmd_driver() {
     # Need kernel headers
     apt-get install -y --no-install-recommends linux-headers-$(uname -r) || true
 
-    local DRIVER_DIR="/tmp/rtl88x2bu_build"
+    local DRIVER_DIR="/home/openhd/proj/rtl88x2bu_build"
     rm -rf "$DRIVER_DIR"
     git clone https://github.com/barakbk-hailo/rtl88x2bu.git "$DRIVER_DIR"
     cd "$DRIVER_DIR"
