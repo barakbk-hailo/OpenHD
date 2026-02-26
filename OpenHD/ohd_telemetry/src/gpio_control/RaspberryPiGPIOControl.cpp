@@ -28,13 +28,13 @@
 namespace openhd::telemetry::rpi {
 
 static void configure_gpio_as_output(int gpio_number) {
-  OHDUtil::run_command("raspi-gpio",
+  OHDUtil::run_command("pinctrl",
                        {"set", std::to_string(gpio_number), "op"});
 }
 
 static void configure_gpio_low_high(int gpio_number, bool low) {
   const std::string tmp = low ? "dl" : "dh";  // drive low / drive high
-  OHDUtil::run_command("raspi-gpio", {"set", std::to_string(gpio_number), tmp});
+  OHDUtil::run_command("pinctrl", {"set", std::to_string(gpio_number), tmp});
 }
 
 static void configure_gpio(int gpio_number, int gpio_value) {
