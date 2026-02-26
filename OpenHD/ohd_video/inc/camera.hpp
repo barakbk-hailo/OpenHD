@@ -50,6 +50,10 @@ static constexpr int X_CAM_TYPE_EXTERNAL_IP = 3;
 // For development, camera that reads input from a file, and then re-encodes it
 // using the platform encoder
 static constexpr int X_CAM_TYPE_DEVELOPMENT_FILESRC = 4;
+// Receive AI-processed video from Hailo detection app via UDP RTP.
+// Functionally similar to X_CAM_TYPE_EXTERNAL but explicitly named for
+// the Hailo AI pipeline integration.
+static constexpr int X_CAM_TYPE_HAILO_AI = 5;
 // ... reserved for development / custom cameras
 
 // OpenHD supports any usb camera outputting raw video (with sw encoding).
@@ -158,6 +162,8 @@ static std::string x_cam_type_to_string(int camera_type) {
       return "EXTERNAL_IP";
     case X_CAM_TYPE_DEVELOPMENT_FILESRC:
       return "DEV_FILESRC";
+    case X_CAM_TYPE_HAILO_AI:
+      return "HAILO_AI";
     case X_CAM_TYPE_USB_GENERIC:
       return "USB";
     case X_CAM_TYPE_USB_INFIRAY:
@@ -611,7 +617,8 @@ static bool is_valid_primary_cam_type(int cam_type) {
 static bool is_valid_secondary_cam_type(int cam_type) {
   if (is_usb_camera(cam_type)) return true;
   if (cam_type == X_CAM_TYPE_DUMMY_SW || cam_type == X_CAM_TYPE_EXTERNAL ||
-      cam_type == X_CAM_TYPE_EXTERNAL_IP || cam_type == X_CAM_TYPE_DISABLED) {
+      cam_type == X_CAM_TYPE_EXTERNAL_IP || cam_type == X_CAM_TYPE_HAILO_AI ||
+      cam_type == X_CAM_TYPE_DISABLED) {
     return true;
   }
   return false;
@@ -720,6 +727,7 @@ static std::vector<ManufacturerForPlatform> get_camera_choices_for_platform(
       CameraNameAndType{"External (DEV)", 2},
       // CameraNameAndType{"External IP (DEV)",3},
       CameraNameAndType{"DEV Filecamera", 4},
+      CameraNameAndType{"Hailo AI", X_CAM_TYPE_HAILO_AI},
   };
   ManufacturerForPlatform MANUFACTURER_DEBUG{"DEV/DEBUG", debug_cameras};
   // Secondary can only be used with USB and / or the debug cameras. CSI is not

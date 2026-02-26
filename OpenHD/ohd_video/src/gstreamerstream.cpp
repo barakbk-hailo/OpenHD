@@ -189,9 +189,11 @@ std::string GStreamerStream::create_source_encode_pipeline(
     openhd::log::get_default()->warn("Using Dummy SW camera type.");
     pipeline << OHDGstHelper::createDummyStreamX(setting);
   } else if (camera.camera_type == X_CAM_TYPE_EXTERNAL ||
-             camera.camera_type == X_CAM_TYPE_EXTERNAL_IP) {
+             camera.camera_type == X_CAM_TYPE_EXTERNAL_IP ||
+             camera.camera_type == X_CAM_TYPE_HAILO_AI) {
     openhd::log::get_default()->warn(
-        "Using external camera or external IP camera.");
+        "Using external camera type ({}).",
+        x_cam_type_to_string(camera.camera_type));
     pipeline << OHDGstHelper::create_input_custom_udp_rtp_port(setting);
   } else if (camera.camera_type == X_CAM_TYPE_DEVELOPMENT_FILESRC) {
     openhd::log::get_default()->warn(
