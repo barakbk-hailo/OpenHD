@@ -41,7 +41,7 @@ PLATFORM_PACKAGES="libunwind-dev gstreamer1.0-plugins-bad gstreamer1.0-plugins-u
 PLATFORM_PACKAGES_REMOVE=""
 }
 function install_pi5_packages {
-PLATFORM_PACKAGES="libcamera-dev"
+PLATFORM_PACKAGES="libcamera-dev libcamera-apps gstreamer1.0-libcamera"
 PLATFORM_PACKAGES_REMOVE=""
 }
 function install_rock_packages {
