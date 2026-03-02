@@ -68,6 +68,8 @@ class OHDVideoAir {
    */
   std::array<std::vector<openhd::Setting>, 2> get_all_camera_settings();
   std::vector<openhd::Setting> get_generic_settings();
+  // Returns true if the primary camera type is HAILO_AI
+  bool is_hailo_ai_active() const;
   // r.n limited to primary and secondary camera
   static constexpr auto MAX_N_CAMERAS = 2;
   void update_arming_state(bool armed);

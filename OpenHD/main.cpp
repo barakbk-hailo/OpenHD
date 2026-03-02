@@ -27,6 +27,7 @@
 #include <ohd_interface.h>
 #ifdef ENABLE_AIR
 #include <ohd_video_air.h>
+#include <hailo_follow_bridge.h>
 #endif  // ENABLE_AIR
 #include <ohd_video_ground.h>
 
@@ -307,6 +308,7 @@ int main(int argc, char *argv[]) {
     }
 #ifdef ENABLE_AIR
     std::unique_ptr<OHDVideoAir> ohd_video_air = nullptr;
+    std::shared_ptr<HailoFollowBridge> hailo_bridge = nullptr;
     if (profile.is_air) {
       auto cameras = OHDVideoAir::discover_cameras();
       ohd_video_air = std::make_unique<OHDVideoAir>(
@@ -317,6 +319,12 @@ int main(int argc, char *argv[]) {
       ohdTelemetry->add_settings_camera_component(1, settings_components[1]);
       // Then the rest
       ohdTelemetry->add_settings_generic(ohd_video_air->get_generic_settings());
+      // Register Hailo drone follow bridge params when HAILO_AI camera is active
+      if (ohd_video_air->is_hailo_ai_active()) {
+        hailo_bridge = std::make_shared<HailoFollowBridge>();
+        ohdTelemetry->add_settings_generic(hailo_bridge->get_all_settings());
+        m_console->info("Hailo follow bridge params registered");
+      }
     }
 #endif  // ENABLE_AIR
     // We do not add any more settings to ohd telemetry - the param set(s) are

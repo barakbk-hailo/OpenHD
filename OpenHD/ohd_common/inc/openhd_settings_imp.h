@@ -59,6 +59,12 @@ struct IntSetting {
       create_log_only_cb_int();
   std::function<int()> get_callback = nullptr;
 };
+struct FloatSetting {
+  float value;
+  std::function<bool(std::string id, float requested_value)> change_callback =
+      nullptr;
+  std::function<float()> get_callback = nullptr;
+};
 struct StringSetting {
   std::string value;
   std::function<bool(std::string id, std::string requested_value)>
@@ -69,7 +75,7 @@ struct StringSetting {
 struct Setting {
   // Do not mutate me
   std::string id;
-  std::variant<IntSetting, StringSetting> setting;
+  std::variant<IntSetting, FloatSetting, StringSetting> setting;
 };
 
 // we need to have unique setting string ids. Creating duplicates by accident is

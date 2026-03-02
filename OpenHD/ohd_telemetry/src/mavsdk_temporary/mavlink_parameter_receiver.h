@@ -92,6 +92,8 @@ class MavlinkParameterReceiver {
                                       const T& param_value);
   Result update_existing_server_param_int(const std::string& name,
                                           const int param_value);
+  Result update_existing_server_param_float(const std::string& name,
+                                            const float param_value);
 
   /**
    * @return a copy of the current parameter set of the server.

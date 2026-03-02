@@ -384,6 +384,12 @@ std::vector<XCamera> OHDVideoAir::discover_cameras() {
   return ret;
 }
 
+bool OHDVideoAir::is_hailo_ai_active() const {
+  return m_generic_settings &&
+         m_generic_settings->get_settings().primary_camera_type ==
+             X_CAM_TYPE_HAILO_AI;
+}
+
 bool OHDVideoAir::x_set_camera_type(bool primary, int cam_type) {
   // Validation depends on primary / secondary -we are quite lazy here
   if (primary) {
