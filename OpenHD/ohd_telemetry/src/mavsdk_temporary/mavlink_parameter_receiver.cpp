@@ -143,11 +143,6 @@ MavlinkParameterReceiver::retrieve_server_param(const std::string& name) {
   return {Result::WrongType, {}};
 }
 
-std::pair<MavlinkParameterReceiver::Result, float>
-MavlinkParameterReceiver::retrieve_server_param_float(const std::string& name) {
-  return retrieve_server_param<float>(name);
-}
-
 std::pair<MavlinkParameterReceiver::Result, std::string>
 MavlinkParameterReceiver::retrieve_server_param_custom(
     const std::string& name) {
@@ -555,12 +550,6 @@ MavlinkParameterReceiver::Result
 MavlinkParameterReceiver::update_existing_server_param_int(
     const std::string& name, const int param_value) {
   return update_existing_server_param<int>(name, param_value);
-}
-
-MavlinkParameterReceiver::Result
-MavlinkParameterReceiver::update_existing_server_param_float(
-    const std::string& name, const float param_value) {
-  return update_existing_server_param<float>(name, param_value);
 }
 
 }  // namespace mavsdk

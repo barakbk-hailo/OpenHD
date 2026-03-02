@@ -44,8 +44,10 @@ class UDPReceiver;
 // QOpenHD. Parameter changes are forwarded to the Python app via UDP JSON on
 // localhost, and current values are received back for read-back sync.
 //
-// Float params use native MAVLink REAL32 (no scaling needed).
-// Int/bool params use MAVLink INT32.
+// All params are registered as MAVLink INT32.
+// FLOAT-typed params (e.g. PID gains) are scaled ×100 in MAVLink
+// (e.g. kp_yaw=5.0 is exposed as DF_KP_YAW=500). The bridge converts
+// internally; the Python app always receives/sends unscaled float values.
 //
 // Wire protocol (JSON over UDP):
 //   OpenHD -> Python (port 5510): {"param":"<name>","value":<number>}

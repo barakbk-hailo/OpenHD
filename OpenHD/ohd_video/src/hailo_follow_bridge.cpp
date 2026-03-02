@@ -30,7 +30,7 @@
 using PT = HailoFollowBridge::ParamType;
 
 static const std::vector<HailoFollowBridge::ParamDef> PARAM_DEFS = {
-    // Controller config params (float — native MAVLink REAL32)
+    // Controller config params (FLOAT — scaled ×100 in MAVLink, e.g. 5.0 → 500)
     {"DF_KP_YAW", "kp_yaw", PT::FLOAT, 5.0f},
     {"DF_KP_FWD", "kp_forward", PT::FLOAT, 3.0f},
     {"DF_KP_BACK", "kp_backward", PT::FLOAT, 5.0f},
@@ -41,7 +41,7 @@ static const std::vector<HailoFollowBridge::ParamDef> PARAM_DEFS = {
     {"DF_YAW_ALPHA", "yaw_alpha", PT::FLOAT, 0.3f},
     {"DF_FWD_ALPHA", "forward_alpha", PT::FLOAT, 0.1f},
     {"DF_TAKEOFF_M", "takeoff_altitude", PT::FLOAT, 3.0f},
-    // Controller config params (int/bool — MAVLink INT32)
+    // Controller config params (INT — value as-is in MAVLink)
     {"DF_YAW_ONLY", "yaw_only", PT::INT, 0},
     {"DF_FIX_ALT", "fixed_altitude", PT::INT, 0},
     {"DF_SMTH_YAW", "smooth_yaw", PT::INT, 1},
@@ -136,34 +136,27 @@ void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
 std::vector<openhd::Setting> HailoFollowBridge::get_all_settings() {
   std::vector<openhd::Setting> ret;
   for (const auto& def : get_param_defs()) {
-    if (def.type == ParamType::FLOAT) {
-      auto change_cb = [this, name = def.python_name](std::string,
-                                                       float value) -> bool {
-        set_param(name, value);
-        send_param_to_python(name, value);
-        return true;
-      };
-      auto get_cb = [this, name = def.python_name]() -> float {
-        return get_param(name);
-      };
-      ret.push_back(openhd::Setting{
-          def.mavlink_id,
-          openhd::FloatSetting{def.default_value, change_cb, get_cb}});
-    } else {
-      auto change_cb = [this, name = def.python_name](std::string,
-                                                       int value) -> bool {
-        set_param(name, static_cast<float>(value));
-        send_param_to_python(name, static_cast<float>(value));
-        return true;
-      };
-      auto get_cb = [this, name = def.python_name]() -> int {
-        return static_cast<int>(get_param(name));
-      };
-      ret.push_back(openhd::Setting{
-          def.mavlink_id,
-          openhd::IntSetting{static_cast<int>(def.default_value), change_cb,
-                             get_cb}});
-    }
+    const bool is_float = (def.type == ParamType::FLOAT);
+    // FLOAT params are scaled ×100 in MAVLink (5.0 → 500) so they can be
+    // represented as integers while retaining 2 decimal places of precision.
+    const int mavlink_default = is_float
+        ? static_cast<int>(def.default_value * 100.0f)
+        : static_cast<int>(def.default_value);
+    auto change_cb = [this, name = def.python_name, is_float](std::string,
+                                                               int value) -> bool {
+      const float python_val = is_float ? value / 100.0f : static_cast<float>(value);
+      set_param(name, python_val);
+      send_param_to_python(name, python_val);
+      return true;
+    };
+    auto get_cb = [this, name = def.python_name, is_float]() -> int {
+      const float python_val = get_param(name);
+      return is_float ? static_cast<int>(python_val * 100.0f)
+                      : static_cast<int>(python_val);
+    };
+    ret.push_back(openhd::Setting{
+        def.mavlink_id,
+        openhd::IntSetting{mavlink_default, change_cb, get_cb}});
   }
   return ret;
 }

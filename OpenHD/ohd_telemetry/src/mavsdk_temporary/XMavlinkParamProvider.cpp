@@ -46,15 +46,6 @@ void XMavlinkParamProvider::add_param(const openhd::Setting& setting) {
     if (intSetting.get_callback != nullptr) {
       m_int_settings_with_update_functionality.push_back(setting);
     }
-  } else if (std::holds_alternative<openhd::FloatSetting>(setting.setting)) {
-    const auto floatSetting = std::get<openhd::FloatSetting>(setting.setting);
-    const auto result =
-        _mavlink_parameter_receiver->provide_server_param<float>(
-            setting.id, floatSetting.value, floatSetting.change_callback);
-    assert(result == mavsdk::MavlinkParameterReceiver::Result::Success);
-    if (floatSetting.get_callback != nullptr) {
-      m_float_settings_with_update_functionality.push_back(setting);
-    }
   } else if (std::holds_alternative<openhd::StringSetting>(setting.setting)) {
     const auto stringSetting = std::get<openhd::StringSetting>(setting.setting);
     const auto result =
@@ -93,22 +84,6 @@ std::vector<MavlinkMessage> XMavlinkParamProvider::process_mavlink_messages(
                                          setting.id, currValueInt, newIntvalue);
         _mavlink_parameter_receiver->update_existing_server_param_int(
             setting.id, newIntvalue);
-      }
-    }
-  }
-  for (const auto& setting : m_float_settings_with_update_functionality) {
-    const auto floatSetting = std::get<openhd::FloatSetting>(setting.setting);
-    const auto currValue =
-        _mavlink_parameter_receiver->retrieve_server_param_float(setting.id);
-    if (currValue.first == mavsdk::MavlinkParameterReceiver::Result::Success) {
-      const float currValueFloat = currValue.second;
-      const float newFloatValue = floatSetting.get_callback();
-      if (currValueFloat != newFloatValue) {
-        openhd::log::get_default()->warn("Updating {} from {} to {}",
-                                         setting.id, currValueFloat,
-                                         newFloatValue);
-        _mavlink_parameter_receiver->update_existing_server_param_float(
-            setting.id, newFloatValue);
       }
     }
   }
