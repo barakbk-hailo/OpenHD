@@ -52,6 +52,9 @@ void XMavlinkParamProvider::add_param(const openhd::Setting& setting) {
         _mavlink_parameter_receiver->provide_server_param<std::string>(
             setting.id, stringSetting.value, stringSetting.change_callback);
     assert(result == mavsdk::MavlinkParameterReceiver::Result::Success);
+    if (stringSetting.get_callback != nullptr) {
+      m_string_settings_with_update_functionality.push_back(setting);
+    }
   } else {
     assert(false);
   }
@@ -84,6 +87,18 @@ std::vector<MavlinkMessage> XMavlinkParamProvider::process_mavlink_messages(
                                          setting.id, currValueInt, newIntvalue);
         _mavlink_parameter_receiver->update_existing_server_param_int(
             setting.id, newIntvalue);
+      }
+    }
+  }
+  for (const auto& setting : m_string_settings_with_update_functionality) {
+    const auto stringSetting = std::get<openhd::StringSetting>(setting.setting);
+    const auto currValue =
+        _mavlink_parameter_receiver->retrieve_server_param_custom(setting.id);
+    if (currValue.first == mavsdk::MavlinkParameterReceiver::Result::Success) {
+      const std::string newValue = stringSetting.get_callback();
+      if (currValue.second != newValue) {
+        _mavlink_parameter_receiver->update_existing_server_param<std::string>(
+            setting.id, newValue);
       }
     }
   }

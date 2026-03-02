@@ -78,6 +78,7 @@ class HailoFollowBridge {
   // Thread-safe parameter cache (stores all values as float for simplicity)
   mutable std::mutex m_params_mutex;
   std::map<std::string, float> m_params;  // keyed by python_name
+  std::string m_avail_ids_str;  // comma-separated tracking IDs currently in view
 
   float get_param(const std::string& python_name) const;
   void set_param(const std::string& python_name, float value);

@@ -47,9 +47,12 @@ static const std::vector<HailoFollowBridge::ParamDef> PARAM_DEFS = {
     {"DF_SMTH_YAW", "smooth_yaw", PT::INT, 1},
     {"DF_SMTH_FWD", "smooth_forward", PT::INT, 1},
     // Follow target control (from follow_server)
-    // DF_FOLLOW_ID: set to a tracking ID to follow, 0 = follow largest, -1 =
-    // clear
+    // DF_FOLLOW_ID: set to a tracking ID to follow, 0 = follow largest, -1 = idle
     {"DF_FOLLOW_ID", "follow_id", PT::INT, 0},
+    // DF_ACTIVE_ID: read-only — the ID currently being tracked by the Python app
+    // (auto-selected or operator-locked). 0 = no one in view.
+    // QOpenHD uses this alongside DF_FOLLOW_ID to show "AUTO · #N" in the badge.
+    {"DF_ACTIVE_ID", "active_id", PT::INT, 0},
 };
 
 const std::vector<HailoFollowBridge::ParamDef>&
@@ -119,15 +122,27 @@ void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
   try {
     std::string raw(reinterpret_cast<const char*>(data), len);
     auto j = nlohmann::json::parse(raw);
-    if (!j.contains("params") || !j["params"].is_object()) return;
-    const auto& params = j["params"];
     std::lock_guard<std::mutex> lock(m_params_mutex);
-    for (auto& [key, val] : params.items()) {
-      if (val.is_number() && m_params.count(key)) {
-        m_params[key] = val.get<float>();
+    if (j.contains("params") && j["params"].is_object()) {
+      const auto& params = j["params"];
+      for (auto& [key, val] : params.items()) {
+        if (val.is_number() && m_params.count(key)) {
+          m_params[key] = val.get<float>();
+        }
       }
+      m_console->debug("Received sync from Python ({} params)", params.size());
     }
-    m_console->debug("Received sync from Python ({} params)", params.size());
+    // Parse available tracking IDs for QOpenHD follow widget
+    if (j.contains("avail_ids") && j["avail_ids"].is_array()) {
+      std::string ids_str;
+      for (const auto& id : j["avail_ids"]) {
+        if (id.is_number_integer()) {
+          if (!ids_str.empty()) ids_str += ",";
+          ids_str += std::to_string(id.get<int>());
+        }
+      }
+      m_avail_ids_str = ids_str;
+    }
   } catch (const std::exception& e) {
     m_console->warn("Failed to parse Python report: {}", e.what());
   }
@@ -158,5 +173,17 @@ std::vector<openhd::Setting> HailoFollowBridge::get_all_settings() {
         def.mavlink_id,
         openhd::IntSetting{mavlink_default, change_cb, get_cb}});
   }
+  // DF_AVAIL_IDS: read-only string — comma-separated tracking IDs currently
+  // visible in frame. Updated by the Python app's periodic report; read by
+  // QOpenHD's drone follow widget to populate the ID selection list.
+  ret.push_back(openhd::Setting{
+      "DF_AVAIL_IDS",
+      openhd::StringSetting{
+          "",
+          openhd::create_log_only_cb_string(),
+          [this]() -> std::string {
+            std::lock_guard<std::mutex> lock(m_params_mutex);
+            return m_avail_ids_str;
+          }}});
   return ret;
 }

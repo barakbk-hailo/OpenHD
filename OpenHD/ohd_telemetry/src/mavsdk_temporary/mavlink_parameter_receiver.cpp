@@ -552,4 +552,9 @@ MavlinkParameterReceiver::update_existing_server_param_int(
   return update_existing_server_param<int>(name, param_value);
 }
 
+// Explicit instantiation so string updates link from external translation units
+template MavlinkParameterReceiver::Result
+MavlinkParameterReceiver::update_existing_server_param<std::string>(
+    const std::string& name, const std::string& value);
+
 }  // namespace mavsdk
