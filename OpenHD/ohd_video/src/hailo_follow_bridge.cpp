@@ -118,22 +118,23 @@ void HailoFollowBridge::send_param_to_python(const std::string& python_name,
   }
 }
 
-void HailoFollowBridge::set_tunnel_cb(TunnelCb cb) {
+void HailoFollowBridge::set_data_cb(DataCb cb) {
   std::lock_guard<std::mutex> lock(m_params_mutex);
-  m_tunnel_cb = std::move(cb);
+  m_data_cb = std::move(cb);
 }
 
-void HailoFollowBridge::emit_tunnel_if_cb_set() {
+void HailoFollowBridge::emit_data_if_cb_set() {
   // m_params_mutex already held by caller
-  if (!m_tunnel_cb) return;
+  if (!m_data_cb) return;
 
   // Binary payload format v2:
   //   [0]     version = 2
   //   [1-2]   active_id (uint16 LE)
   //   [3]     count (uint8)
   //   Per bbox (11 bytes): id(2) cx(2) cy(2) w(2) h(2) flags(1)
+  // Max ~126 bboxes per packet (1400 byte MTU safety margin)
   const uint8_t count = static_cast<uint8_t>(
-      std::min(m_pending_bboxes.size(), static_cast<size_t>(11)));  // max 11 bboxes = 125 bytes
+      std::min(m_pending_bboxes.size(), static_cast<size_t>(126)));
   std::vector<uint8_t> payload;
   payload.reserve(4 + count * 11);
   payload.push_back(2);  // version
@@ -160,9 +161,9 @@ void HailoFollowBridge::emit_tunnel_if_cb_set() {
     push_u16(to_u16(b.h));
     payload.push_back(b.tracked ? 1u : 0u);  // flags: bit0=tracked
   }
-  m_console->debug("Emitting TUNNEL payload: {} bytes, active_id={}, count={}",
+  m_console->debug("Emitting detection payload: {} bytes, active_id={}, count={}",
                    payload.size(), m_pending_active_id, count);
-  m_tunnel_cb(payload);
+  m_data_cb(payload);
 }
 
 void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
@@ -211,7 +212,7 @@ void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
         entry.tracked = bbox.value("tracked", false);
         m_pending_bboxes.push_back(entry);
       }
-      emit_tunnel_if_cb_set();
+      emit_data_if_cb_set();
     }
   } catch (const std::exception& e) {
     m_console->warn("Failed to parse Python report: {}", e.what());

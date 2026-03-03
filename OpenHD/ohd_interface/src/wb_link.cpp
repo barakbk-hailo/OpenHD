@@ -223,6 +223,13 @@ WBLink::WBLink(OHDProfile profile, std::vector<WiFiCard> broadcast_cards)
       options_audio_tx.packet_data_queue_size = 16;
       m_wb_audio_tx = std::make_unique<WBStreamTx>(m_wb_txrx, options_audio_tx,
                                                    m_tx_header_1);
+      // Detection data TX (Hailo bboxes) — air to ground, no FEC
+      WBStreamTx::Options options_detection_tx{};
+      options_detection_tx.enable_fec = false;
+      options_detection_tx.radio_port = openhd::DETECTION_DATA_RADIO_PORT;
+      options_detection_tx.packet_data_queue_size = 16;
+      m_wb_detection_tx = std::make_unique<WBStreamTx>(
+          m_wb_txrx, options_detection_tx, m_tx_header_1);
     } else {
       // we receive video
       auto cb1 = [this](const uint8_t* data, int data_len) {
@@ -275,6 +282,18 @@ WBLink::WBLink(OHDProfile profile, std::vector<WiFiCard> broadcast_cards)
       options_audio_rx.packet_queue_size = 16;
       m_wb_audio_rx = std::make_unique<WBStreamRx>(m_wb_txrx, options_audio_rx);
       m_wb_audio_rx->set_callback(cb_audio);
+      // Detection data RX (Hailo bboxes) — air to ground, no FEC
+      auto cb_detection = [this](const uint8_t* data, int data_len) {
+        on_receive_detection_data(data, data_len);
+      };
+      WBStreamRx::Options options_detection_rx{};
+      options_detection_rx.radio_port = openhd::DETECTION_DATA_RADIO_PORT;
+      options_detection_rx.enable_fec = false;
+      options_detection_rx.enable_threading = true;
+      options_detection_rx.packet_queue_size = 16;
+      m_wb_detection_rx =
+          std::make_unique<WBStreamRx>(m_wb_txrx, options_detection_rx);
+      m_wb_detection_rx->set_callback(cb_detection);
     }
   }
   apply_frequency_and_channel_width_from_settings();
@@ -353,6 +372,8 @@ WBLink::~WBLink() {
   m_wb_video_rx_list.resize(0);
   m_wb_audio_tx.reset();
   m_wb_audio_rx.reset();
+  m_wb_detection_tx.reset();
+  m_wb_detection_rx.reset();
   m_wb_txrx = nullptr;
   wifi::commandhelper::cleanup_openhd_driver_overrides();
   m_console->debug("WBLink::~WBLink() end");
@@ -1332,6 +1353,13 @@ void WBLink::transmit_video_data(
 void WBLink::transmit_audio_data(const openhd::AudioPacket& audio_packet) {
   if (m_wb_audio_tx) {
     m_wb_audio_tx->try_enqueue_packet(audio_packet.data);
+  }
+}
+
+void WBLink::transmit_detection_data(
+    std::shared_ptr<std::vector<uint8_t>> data) {
+  if (m_wb_detection_tx) {
+    m_wb_detection_tx->try_enqueue_packet(data);
   }
 }
 

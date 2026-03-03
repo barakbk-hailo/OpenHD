@@ -138,6 +138,19 @@ class OHDLink {
       m_audio_data_rx_cb(data, data_len);
     }
   }
+
+ public:
+  // Detection data (Hailo bboxes) — unidirectional air → ground
+  typedef std::function<void(const uint8_t* data, int data_len)>
+      ON_DETECTION_DATA_RX_CB;
+  ON_DETECTION_DATA_RX_CB m_detection_data_rx_cb = nullptr;
+  virtual void transmit_detection_data(
+      std::shared_ptr<std::vector<uint8_t>> data) = 0;
+  void on_receive_detection_data(const uint8_t* data, int data_len) {
+    if (m_detection_data_rx_cb) {
+      m_detection_data_rx_cb(data, data_len);
+    }
+  }
 };
 
 class DummyDebugLink : public OHDLink {
@@ -170,6 +183,8 @@ class DummyDebugLink : public OHDLink {
   void transmit_audio_data(const openhd::AudioPacket& audio_packet) override {
     m_console_audio->debug("Got audio data {}", audio_packet.data->size());
   }
+  void transmit_detection_data(
+      std::shared_ptr<std::vector<uint8_t>> data) override {}
 
  private:
   std::shared_ptr<spdlog::logger> m_console_video;

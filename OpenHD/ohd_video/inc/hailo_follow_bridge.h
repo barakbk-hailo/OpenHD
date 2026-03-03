@@ -57,10 +57,7 @@ class UDPReceiver;
 //                                   "bboxes": [{"id":.., "cx":.., "cy":..,
 //                                               "w":.., "h":.., "tracked":..}]}
 //
-// TUNNEL payload type for bbox overlay (vendor-specific range: 32768-65535)
-static constexpr uint16_t HAILO_TUNNEL_PAYLOAD_TYPE = 0x8001;
-
-// Binary payload format v2 (max 128 bytes):
+// Binary payload format v2 (dedicated wfb stream, no size limit):
 //   Byte 0:      version = 2
 //   Byte 1-2:    active_id (uint16 LE, 0=none)
 //   Byte 3:      count (uint8)
@@ -79,10 +76,10 @@ class HailoFollowBridge {
 
   std::vector<openhd::Setting> get_all_settings();
 
-  // Callback invoked with binary TUNNEL payload bytes whenever new bbox data
-  // arrives from Python. Pack into MAVLINK_MSG_ID_TUNNEL and send to ground.
-  using TunnelCb = std::function<void(std::vector<uint8_t>)>;
-  void set_tunnel_cb(TunnelCb cb);
+  // Callback invoked with binary detection payload bytes whenever new bbox data
+  // arrives from Python. Transmitted via dedicated wfb stream to ground.
+  using DataCb = std::function<void(std::vector<uint8_t>)>;
+  void set_data_cb(DataCb cb);
 
   static constexpr int SEND_PORT = 5510;    // OpenHD -> Python
   static constexpr int LISTEN_PORT = 5511;  // Python -> OpenHD
@@ -114,11 +111,11 @@ class HailoFollowBridge {
   std::vector<BboxEntry> m_pending_bboxes;
   uint16_t m_pending_active_id = 0;
 
-  // Callback to emit TUNNEL payloads to the telemetry system
-  TunnelCb m_tunnel_cb;
+  // Callback to emit detection data payloads via wfb stream
+  DataCb m_data_cb;
 
-  // Build binary TUNNEL payload from pending bboxes and call m_tunnel_cb
-  void emit_tunnel_if_cb_set();
+  // Build binary payload from pending bboxes and call m_data_cb
+  void emit_data_if_cb_set();
 
   float get_param(const std::string& python_name) const;
   void set_param(const std::string& python_name, float value);

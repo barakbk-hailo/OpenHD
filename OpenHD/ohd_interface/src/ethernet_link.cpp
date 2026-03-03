@@ -145,6 +145,11 @@ void EthernetLink::transmit_audio_data(
   // Currently not implemented for EthernetLink
 }
 
+void EthernetLink::transmit_detection_data(
+    std::shared_ptr<std::vector<uint8_t>> data) {
+  // Currently not implemented for EthernetLink
+}
+
 void EthernetLink::handle_video_data(int stream_index, const uint8_t* data,
                                      int data_len) {
   // Forward incoming video data to the upper layer

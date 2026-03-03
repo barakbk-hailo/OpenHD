@@ -44,6 +44,8 @@ class EthernetLink : public OHDLink {
       int stream_index,
       const openhd::FragmentedVideoFrame& fragmented_video_frame) override;
   void transmit_audio_data(const openhd::AudioPacket& audio_packet) override;
+  void transmit_detection_data(
+      std::shared_ptr<std::vector<uint8_t>> data) override;
 
  private:
   OHDProfile m_profile;

@@ -494,6 +494,11 @@ void MicrohardLink::transmit_audio_data(
   openhd::log::get_default()->warn("Transmitting audio data (not implemented)");
 }
 
+void MicrohardLink::transmit_detection_data(
+    std::shared_ptr<std::vector<uint8_t>> data) {
+  // Currently not implemented for MicrohardLink
+}
+
 std::vector<openhd::Setting> MicrohardLink::get_all_settings() {
   using namespace openhd;
   std::vector<Setting> settings;

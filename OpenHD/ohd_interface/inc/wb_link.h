@@ -168,6 +168,8 @@ class WBLink : public OHDLink {
       int stream_index,
       const openhd::FragmentedVideoFrame& fragmented_video_frame) override;
   void transmit_audio_data(const openhd::AudioPacket& audio_packet) override;
+  void transmit_detection_data(
+      std::shared_ptr<std::vector<uint8_t>> data) override;
   // How often per second we broadcast the session key -
   // we send the session key ~2 times per second
   static constexpr std::chrono::milliseconds SESSION_KEY_PACKETS_INTERVAL =
@@ -208,6 +210,9 @@ class WBLink : public OHDLink {
   // For audio or custom data
   std::unique_ptr<WBStreamTx> m_wb_audio_tx;
   std::unique_ptr<WBStreamRx> m_wb_audio_rx;
+  // For detection data (Hailo bboxes) — air to ground
+  std::unique_ptr<WBStreamTx> m_wb_detection_tx;
+  std::unique_ptr<WBStreamRx> m_wb_detection_rx;
   // We have one worker thread for asynchronously performing operation(s) like
   // changing the frequency but also recalculating statistics that are then
   // forwarded to openhd_telemetry for broadcast

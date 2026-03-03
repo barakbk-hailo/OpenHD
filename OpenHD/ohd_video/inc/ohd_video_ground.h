@@ -56,6 +56,7 @@ class OHDVideoGround {
   std::unique_ptr<openhd::UDPMultiForwarder> m_primary_video_forwarder;
   std::unique_ptr<openhd::UDPMultiForwarder> m_secondary_video_forwarder;
   std::unique_ptr<openhd::UDPMultiForwarder> m_audio_forwarder;
+  std::unique_ptr<openhd::UDPMultiForwarder> m_detection_forwarder;
   /**
    * Forward video to all device(s) consuming video.
    * Called by the ohd link handle (aka only wb right now)
@@ -68,6 +69,11 @@ class OHDVideoGround {
    * Forward audio. We only have up to 1 audio stream
    */
   void on_audio_data(const uint8_t* data, int data_len);
+
+  /**
+   * Forward detection data (Hailo bboxes) to QOpenHD via localhost UDP.
+   */
+  void on_detection_data(const uint8_t* data, int data_len);
 
  private:
   void start_stop_forwarding_external_device(

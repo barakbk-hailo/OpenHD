@@ -26,6 +26,7 @@
 #include <utility>
 
 #include "openhd_config.h"
+#include "openhd_global_constants.hpp"
 #include "openhd_util.h"
 
 OHDVideoGround::OHDVideoGround(std::shared_ptr<OHDLink> link_handle)
@@ -34,6 +35,9 @@ OHDVideoGround::OHDVideoGround(std::shared_ptr<OHDLink> link_handle)
   m_primary_video_forwarder = std::make_unique<openhd::UDPMultiForwarder>();
   m_secondary_video_forwarder = std::make_unique<openhd::UDPMultiForwarder>();
   m_audio_forwarder = std::make_unique<openhd::UDPMultiForwarder>();
+  m_detection_forwarder = std::make_unique<openhd::UDPMultiForwarder>();
+  m_detection_forwarder->addForwarder("127.0.0.1",
+                                       openhd::DETECTION_GROUND_UDP);
   // We always forward video to localhost::5600 (primary) and 5601 (secondary)
   // for the default Ground control application (e.g. QOpenHD) to pick up
   addForwarder("127.0.0.1");
@@ -53,6 +57,10 @@ OHDVideoGround::OHDVideoGround(std::shared_ptr<OHDLink> link_handle)
                                                int data_len) {
       on_audio_data(data, data_len);
     };
+    m_link_handle->m_detection_data_rx_cb = [this](const uint8_t* data,
+                                                    int data_len) {
+      on_detection_data(data, data_len);
+    };
   } else {
     m_console->warn("No link handle, no video forwarding");
   }
@@ -70,6 +78,7 @@ OHDVideoGround::~OHDVideoGround() {
   if (m_link_handle) {
     m_link_handle->register_on_receive_video_data_cb(nullptr);
     m_link_handle->m_audio_data_rx_cb = nullptr;
+    m_link_handle->m_detection_data_rx_cb = nullptr;
   }
 }
 
@@ -128,4 +137,8 @@ void OHDVideoGround::start_stop_forwarding_external_device(
 
 void OHDVideoGround::on_audio_data(const uint8_t* data, int data_len) {
   m_audio_forwarder->forwardPacketViaUDP(data, data_len);
+}
+
+void OHDVideoGround::on_detection_data(const uint8_t* data, int data_len) {
+  m_detection_forwarder->forwardPacketViaUDP(data, data_len);
 }

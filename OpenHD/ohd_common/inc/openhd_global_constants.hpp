@@ -51,6 +51,11 @@ static constexpr auto MANAGEMENT_RADIO_PORT_GND_TX = 21;
 // Audio is unidirectional from air to ground
 static constexpr auto AUDIO_WIFIBROADCAST_PORT = 30;
 
+// Detection data (Hailo bboxes) is unidirectional from air to ground
+static constexpr auto DETECTION_DATA_RADIO_PORT = 40;
+// Where detection data is forwarded on the ground via UDP for QOpenHD
+static constexpr auto DETECTION_GROUND_UDP = 5520;
+
 // Where the video stream transmitted via wifibroadcast is made available to
 // QOpenHD to be picked up.
 static constexpr auto VIDEO_GROUND_VIDEO_STREAM_1_UDP = 5600;
