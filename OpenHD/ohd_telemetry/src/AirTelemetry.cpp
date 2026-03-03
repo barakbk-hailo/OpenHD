@@ -177,6 +177,11 @@ std::string AirTelemetry::create_debug() {
   return ss.str();
 }
 
+void AirTelemetry::push_message_to_ground(MavlinkMessage msg) {
+  std::vector<MavlinkMessage> msgs{std::move(msg)};
+  send_messages_ground_unit(msgs);
+}
+
 void AirTelemetry::add_settings_generic(
     const std::vector<openhd::Setting>& settings) {
   std::lock_guard<std::mutex> guard(m_components_lock);

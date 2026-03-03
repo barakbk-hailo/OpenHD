@@ -24,6 +24,7 @@
 #ifndef OPENHD_HAILO_FOLLOW_BRIDGE_H
 #define OPENHD_HAILO_FOLLOW_BRIDGE_H
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -51,13 +52,37 @@ class UDPReceiver;
 //
 // Wire protocol (JSON over UDP):
 //   OpenHD -> Python (port 5510): {"param":"<name>","value":<number>}
-//   Python -> OpenHD (port 5511): {"params":{"<name>":<number>,...}}
+//   Python -> OpenHD (port 5511): {"params":{"<name>":<number>,...},
+//                                   "avail_ids": [...],
+//                                   "bboxes": [{"id":.., "cx":.., "cy":..,
+//                                               "w":.., "h":.., "tracked":..}]}
+//
+// TUNNEL payload type for bbox overlay (vendor-specific range: 32768-65535)
+static constexpr uint16_t HAILO_TUNNEL_PAYLOAD_TYPE = 0x8001;
+
+// Binary payload format v2 (max 128 bytes):
+//   Byte 0:      version = 2
+//   Byte 1-2:    active_id (uint16 LE, 0=none)
+//   Byte 3:      count (uint8)
+//   Per bbox (11 bytes):
+//     [0-1] id      uint16 LE
+//     [2-3] cx      uint16 LE (0-65535 normalized, 0=0.0, 65535=1.0)
+//     [4-5] cy      uint16 LE
+//     [6-7] w       uint16 LE
+//     [8-9] h       uint16 LE
+//     [10]  flags   uint8 (bit0 = is_tracked)
+
 class HailoFollowBridge {
  public:
   HailoFollowBridge();
   ~HailoFollowBridge();
 
   std::vector<openhd::Setting> get_all_settings();
+
+  // Callback invoked with binary TUNNEL payload bytes whenever new bbox data
+  // arrives from Python. Pack into MAVLINK_MSG_ID_TUNNEL and send to ground.
+  using TunnelCb = std::function<void(std::vector<uint8_t>)>;
+  void set_tunnel_cb(TunnelCb cb);
 
   static constexpr int SEND_PORT = 5510;    // OpenHD -> Python
   static constexpr int LISTEN_PORT = 5511;  // Python -> OpenHD
@@ -79,6 +104,21 @@ class HailoFollowBridge {
   mutable std::mutex m_params_mutex;
   std::map<std::string, float> m_params;  // keyed by python_name
   std::string m_avail_ids_str;  // comma-separated tracking IDs currently in view
+
+  // Pending bbox data for TUNNEL emission (updated by on_udp_data)
+  struct BboxEntry {
+    uint16_t id;
+    float cx, cy, w, h;
+    bool tracked;
+  };
+  std::vector<BboxEntry> m_pending_bboxes;
+  uint16_t m_pending_active_id = 0;
+
+  // Callback to emit TUNNEL payloads to the telemetry system
+  TunnelCb m_tunnel_cb;
+
+  // Build binary TUNNEL payload from pending bboxes and call m_tunnel_cb
+  void emit_tunnel_if_cb_set();
 
   float get_param(const std::string& python_name) const;
   void set_param(const std::string& python_name, float value);

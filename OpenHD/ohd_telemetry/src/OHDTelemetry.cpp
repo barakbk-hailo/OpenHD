@@ -95,3 +95,9 @@ void OHDTelemetry::set_link_handle(std::shared_ptr<OHDLink> link) {
     m_ground_telemetry->set_link_handle(link);
   }
 }
+
+void OHDTelemetry::push_message_to_ground(MavlinkMessage msg) const {
+  if (m_profile.is_air && m_air_telemetry) {
+    m_air_telemetry->push_message_to_ground(std::move(msg));
+  }
+}

@@ -28,6 +28,7 @@
 #include <thread>
 #include <utility>
 
+#include "mav_include.h"
 #include "openhd_action_handler.h"
 #include "openhd_external_device.h"
 #include "openhd_link.hpp"
@@ -74,6 +75,8 @@ class OHDTelemetry {
   // and also agnostic weather this link exists or not (since it is already
   // using a lossy link).
   void set_link_handle(std::shared_ptr<OHDLink> link);
+  // Push a single message directly to the ground unit (air mode only).
+  void push_message_to_ground(MavlinkMessage msg) const;
 
  private:
   // only either one of them both is active at a time.

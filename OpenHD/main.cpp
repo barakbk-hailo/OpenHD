@@ -323,7 +323,23 @@ int main(int argc, char *argv[]) {
       if (ohd_video_air->is_hailo_ai_active()) {
         hailo_bridge = std::make_shared<HailoFollowBridge>();
         ohdTelemetry->add_settings_generic(hailo_bridge->get_all_settings());
-        m_console->info("Hailo follow bridge params registered");
+        // Wire tunnel callback: pack bbox payload into TUNNEL and send to ground
+        hailo_bridge->set_tunnel_cb(
+            [&ohdTelemetry](std::vector<uint8_t> payload) {
+              if (payload.size() > 128) return;  // TUNNEL limit
+              mavlink_tunnel_t tunnel{};
+              tunnel.target_system = 0;
+              tunnel.target_component = 0;
+              tunnel.payload_type = HAILO_TUNNEL_PAYLOAD_TYPE;
+              tunnel.payload_length = static_cast<uint8_t>(payload.size());
+              std::copy(payload.begin(), payload.end(), tunnel.payload);
+              mavlink_message_t msg;
+              mavlink_msg_tunnel_encode(OHD_SYS_ID_AIR,
+                                       MAV_COMP_ID_ONBOARD_COMPUTER, &msg,
+                                       &tunnel);
+              ohdTelemetry->push_message_to_ground(MavlinkMessage{msg});
+            });
+        m_console->info("Hailo follow bridge params + TUNNEL overlay registered");
       }
     }
 #endif  // ENABLE_AIR

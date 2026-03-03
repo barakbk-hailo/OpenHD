@@ -85,6 +85,12 @@ class AirTelemetry : public MavlinkSystem {
    * messages from/to the ground unit are just discarded.
    */
   void set_link_handle(std::shared_ptr<OHDLink> link);
+  /**
+   * Push a single message directly to the ground unit (thread-safe).
+   * Useful for event-driven messages (e.g. TUNNEL bbox overlay) that are not
+   * tied to the 100ms component loop.
+   */
+  void push_message_to_ground(MavlinkMessage msg);
 
  private:
   // send a mavlink message to the flight controller connected to the air unit

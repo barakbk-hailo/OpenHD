@@ -118,6 +118,53 @@ void HailoFollowBridge::send_param_to_python(const std::string& python_name,
   }
 }
 
+void HailoFollowBridge::set_tunnel_cb(TunnelCb cb) {
+  std::lock_guard<std::mutex> lock(m_params_mutex);
+  m_tunnel_cb = std::move(cb);
+}
+
+void HailoFollowBridge::emit_tunnel_if_cb_set() {
+  // m_params_mutex already held by caller
+  if (!m_tunnel_cb) return;
+
+  // Binary payload format v2:
+  //   [0]     version = 2
+  //   [1-2]   active_id (uint16 LE)
+  //   [3]     count (uint8)
+  //   Per bbox (11 bytes): id(2) cx(2) cy(2) w(2) h(2) flags(1)
+  const uint8_t count = static_cast<uint8_t>(
+      std::min(m_pending_bboxes.size(), static_cast<size_t>(11)));  // max 11 bboxes = 125 bytes
+  std::vector<uint8_t> payload;
+  payload.reserve(4 + count * 11);
+  payload.push_back(2);  // version
+  payload.push_back(static_cast<uint8_t>(m_pending_active_id & 0xFF));
+  payload.push_back(static_cast<uint8_t>(m_pending_active_id >> 8));
+  payload.push_back(count);
+  auto push_u16 = [&payload](uint16_t v) {
+    payload.push_back(static_cast<uint8_t>(v & 0xFF));
+    payload.push_back(static_cast<uint8_t>(v >> 8));
+  };
+  for (uint8_t i = 0; i < count; ++i) {
+    const auto& b = m_pending_bboxes[i];
+    // Normalize float [0,1] -> uint16 [0,65535]
+    auto to_u16 = [](float v) -> uint16_t {
+      int iv = static_cast<int>(v * 65535.0f + 0.5f);
+      if (iv < 0) iv = 0;
+      if (iv > 65535) iv = 65535;
+      return static_cast<uint16_t>(iv);
+    };
+    push_u16(b.id);
+    push_u16(to_u16(b.cx));
+    push_u16(to_u16(b.cy));
+    push_u16(to_u16(b.w));
+    push_u16(to_u16(b.h));
+    payload.push_back(b.tracked ? 1u : 0u);  // flags: bit0=tracked
+  }
+  m_console->debug("Emitting TUNNEL payload: {} bytes, active_id={}, count={}",
+                   payload.size(), m_pending_active_id, count);
+  m_tunnel_cb(payload);
+}
+
 void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
   try {
     std::string raw(reinterpret_cast<const char*>(data), len);
@@ -142,6 +189,29 @@ void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
         }
       }
       m_avail_ids_str = ids_str;
+    }
+    // Parse bounding boxes for TUNNEL overlay
+    if (j.contains("bboxes") && j["bboxes"].is_array()) {
+      m_console->debug("bboxes array received, size={}", j["bboxes"].size());
+      m_pending_bboxes.clear();
+      // active_id is reported in params["active_id"] (already in m_params)
+      float active_f = 0.0f;
+      auto it = m_params.find("active_id");
+      if (it != m_params.end()) active_f = it->second;
+      m_pending_active_id = static_cast<uint16_t>(
+          std::max(0.0f, std::min(65535.0f, active_f)));
+      for (const auto& bbox : j["bboxes"]) {
+        if (!bbox.is_object()) continue;
+        BboxEntry entry{};
+        entry.id      = static_cast<uint16_t>(bbox.value("id", 0));
+        entry.cx      = bbox.value("cx", 0.0f);
+        entry.cy      = bbox.value("cy", 0.0f);
+        entry.w       = bbox.value("w", 0.0f);
+        entry.h       = bbox.value("h", 0.0f);
+        entry.tracked = bbox.value("tracked", false);
+        m_pending_bboxes.push_back(entry);
+      }
+      emit_tunnel_if_cb_set();
     }
   } catch (const std::exception& e) {
     m_console->warn("Failed to parse Python report: {}", e.what());
