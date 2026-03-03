@@ -31,6 +31,7 @@
 
 #include "air_recording_helper.hpp"
 #include "config_paths.h"
+#include "openhd_global_constants.hpp"
 #include "gst_appsink_helper.h"
 #include "gst_debug_helper.h"
 #include "gst_helper.hpp"
@@ -136,7 +137,9 @@ std::string GStreamerStream::create_source_encode_pipeline(
   } else if (camera.requires_rpi_libcamera_pipeline()) {
     openhd::log::get_default()->debug(
         "Camera requires RPI Libcamera pipeline.");
-    pipeline << OHDGstHelper::createLibcamerasrcStream(setting);
+    const bool hailo_raw_tee = OHDFilesystemUtil::exists(
+        std::string(getConfigBasePath()) + "hailo.txt");
+    pipeline << OHDGstHelper::createLibcamerasrcStream(setting, hailo_raw_tee);
   } else if (camera.requires_rpi_veye_pipeline()) {
     openhd::log::get_default()->debug("Camera requires RPI Veye pipeline.");
     auto bus = "/dev/video0";
@@ -273,6 +276,15 @@ void GStreamerStream::setup() {
     m_opt_curr_recording_filename = recording_filename;
   } else {
     m_opt_curr_recording_filename = std::nullopt;
+  }
+  const bool ADD_HAILO_RAW_PASSTHROUGH =
+      OHDFilesystemUtil::exists(
+          std::string(getConfigBasePath()) + "hailo.txt") &&
+      camera.requires_rpi_libcamera_pipeline();
+  if (ADD_HAILO_RAW_PASSTHROUGH) {
+    m_console->info("Hailo raw NV12 passthrough via SHM active");
+    pipeline_content << OHDGstHelper::createHailoRawPassthroughBranch(
+        openhd::HAILO_RAW_SHM_SOCKET);
   }
   {
     const auto index = m_camera_holder->get_camera().index;

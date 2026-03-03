@@ -392,7 +392,8 @@ static std::string create_rpi_hdmi_v4l2_stream(const CameraSettings& settings) {
   return ss.str();
 }
 
-static std::string createLibcamerasrcStream(const CameraSettings& settings) {
+static std::string createLibcamerasrcStream(const CameraSettings& settings,
+                                             bool hailo_raw_tee = false) {
   using namespace openhd;
   assert(settings.streamed_video_format.isValid());
   std::stringstream ss;
@@ -472,6 +473,9 @@ static std::string createLibcamerasrcStream(const CameraSettings& settings) {
         settings.streamed_video_format.width,
         settings.streamed_video_format.height,
         settings.streamed_video_format.framerate);
+    if (hailo_raw_tee) {
+      ss << "tee name=raw_t ! queue ! ";
+    }
     if (settings.force_sw_encode) {
       openhd::log::get_default()->warn("Forced SW encode");
       // Convert NV12 from libcamera ISP to I420 for x264enc
@@ -833,6 +837,16 @@ static std::string createRecordingForVideoCodec(
     ss << "matroskamux ! filesink location=" << out_filename;
   }
   return ss.str();
+}
+
+static std::string createHailoRawPassthroughBranch(
+    const std::string& shm_socket_path) {
+  // NV12 frame size: 1280*720*1.5 ~ 1.4MB. 10MB fits ~7 frames.
+  return fmt::format(
+      " raw_t. ! queue leaky=downstream max-size-buffers=2 ! "
+      "shmsink socket-path={} wait-for-connection=false "
+      "shm-size=10000000 perms=438 ",
+      shm_socket_path);
 }
 
 static std::string create_input_custom_udp_rtp_port(

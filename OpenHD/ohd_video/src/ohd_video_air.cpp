@@ -26,7 +26,9 @@
 #include <utility>
 
 #include "camera_discovery.h"
+#include "config_paths.h"
 #include "gstaudiostream.h"
+#include "openhd_util_filesystem.h"
 #include "gstreamerstream.h"
 #include "nalu/fragment_helper.h"
 #include "openhd_config.h"
@@ -385,9 +387,17 @@ std::vector<XCamera> OHDVideoAir::discover_cameras() {
 }
 
 bool OHDVideoAir::is_hailo_ai_active() const {
-  return m_generic_settings &&
-         m_generic_settings->get_settings().primary_camera_type ==
-             X_CAM_TYPE_HAILO_AI;
+  if (!m_generic_settings) return false;
+  const int cam_type = m_generic_settings->get_settings().primary_camera_type;
+  if (cam_type == X_CAM_TYPE_HAILO_AI) return true;
+  // Mode B: raw passthrough — OpenHD captures, drone_follow_app does AI only
+  if (OHDFilesystemUtil::exists(
+          std::string(getConfigBasePath()) + "hailo.txt")) {
+    XCamera tmp;
+    tmp.camera_type = cam_type;
+    if (tmp.requires_rpi_libcamera_pipeline()) return true;
+  }
+  return false;
 }
 
 bool OHDVideoAir::x_set_camera_type(bool primary, int cam_type) {

@@ -56,6 +56,9 @@ static constexpr auto DETECTION_DATA_RADIO_PORT = 40;
 // Where detection data is forwarded on the ground via UDP for QOpenHD
 static constexpr auto DETECTION_GROUND_UDP = 5520;
 
+// Hailo passthrough: raw NV12 shared memory socket for drone_follow_app
+static constexpr auto HAILO_RAW_SHM_SOCKET = "/tmp/openhd_raw_video";
+
 // Where the video stream transmitted via wifibroadcast is made available to
 // QOpenHD to be picked up.
 static constexpr auto VIDEO_GROUND_VIDEO_STREAM_1_UDP = 5600;
