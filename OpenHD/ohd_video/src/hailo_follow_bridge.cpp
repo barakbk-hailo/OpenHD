@@ -127,19 +127,26 @@ void HailoFollowBridge::emit_data_if_cb_set() {
   // m_params_mutex already held by caller
   if (!m_data_cb) return;
 
-  // Binary payload format v2:
-  //   [0]     version = 2
+  // Binary payload format v3:
+  //   [0]     version = 3
   //   [1-2]   active_id (uint16 LE)
-  //   [3]     count (uint8)
+  //   [3-4]   follow_id (int16 LE, -1=idle, 0=auto, N=locked)
+  //   [5]     count (uint8)
   //   Per bbox (11 bytes): id(2) cx(2) cy(2) w(2) h(2) flags(1)
   // Max ~126 bboxes per packet (1400 byte MTU safety margin)
   const uint8_t count = static_cast<uint8_t>(
       std::min(m_pending_bboxes.size(), static_cast<size_t>(126)));
+  // follow_id from params cache (set by Python report or QOpenHD)
+  auto fi_it = m_params.find("follow_id");
+  const int16_t follow_id = fi_it != m_params.end()
+      ? static_cast<int16_t>(fi_it->second) : 0;
   std::vector<uint8_t> payload;
-  payload.reserve(4 + count * 11);
-  payload.push_back(2);  // version
+  payload.reserve(6 + count * 11);
+  payload.push_back(3);  // version
   payload.push_back(static_cast<uint8_t>(m_pending_active_id & 0xFF));
   payload.push_back(static_cast<uint8_t>(m_pending_active_id >> 8));
+  payload.push_back(static_cast<uint8_t>(static_cast<uint16_t>(follow_id) & 0xFF));
+  payload.push_back(static_cast<uint8_t>(static_cast<uint16_t>(follow_id) >> 8));
   payload.push_back(count);
   auto push_u16 = [&payload](uint16_t v) {
     payload.push_back(static_cast<uint8_t>(v & 0xFF));
