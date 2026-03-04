@@ -115,6 +115,10 @@ endif::[]
 
 TIP: Look around, read the {wiki}, ask questions on {telegram} or {discord}!
 
+== Hailo AI Integration
+
+For documentation on the Hailo AI drone-following integration (architecture, build instructions, configuration, and changelogs), see link:HAILO_INTEGRATION.md[HAILO_INTEGRATION.md].
+
 == Structure
 
 This repository is one of the following which forms the foundation of the project:

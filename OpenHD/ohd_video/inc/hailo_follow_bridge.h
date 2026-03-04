@@ -53,7 +53,6 @@ class UDPReceiver;
 // Wire protocol (JSON over UDP):
 //   OpenHD -> Python (port 5510): {"param":"<name>","value":<number>}
 //   Python -> OpenHD (port 5511): {"params":{"<name>":<number>,...},
-//                                   "avail_ids": [...],
 //                                   "bboxes": [{"id":.., "cx":.., "cy":..,
 //                                               "w":.., "h":.., "tracked":..}]}
 //
@@ -104,7 +103,6 @@ class HailoFollowBridge {
   // Thread-safe parameter cache (stores all values as float for simplicity)
   mutable std::mutex m_params_mutex;
   std::map<std::string, float> m_params;  // keyed by python_name
-  std::string m_avail_ids_str;  // comma-separated tracking IDs currently in view
 
   // Pending bbox data for TUNNEL emission (updated by on_udp_data)
   struct BboxEntry {

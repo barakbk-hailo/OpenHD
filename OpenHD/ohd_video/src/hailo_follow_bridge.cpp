@@ -196,18 +196,7 @@ void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
       }
       m_console->debug("Received sync from Python ({} params)", params.size());
     }
-    // Parse available tracking IDs for QOpenHD follow widget
-    if (j.contains("avail_ids") && j["avail_ids"].is_array()) {
-      std::string ids_str;
-      for (const auto& id : j["avail_ids"]) {
-        if (id.is_number_integer()) {
-          if (!ids_str.empty()) ids_str += ",";
-          ids_str += std::to_string(id.get<int>());
-        }
-      }
-      m_avail_ids_str = ids_str;
-    }
-    // Parse bounding boxes for TUNNEL overlay
+    // Parse bounding boxes for detection overlay
     if (j.contains("bboxes") && j["bboxes"].is_array()) {
       m_console->debug("bboxes array received, size={}", j["bboxes"].size());
       m_pending_bboxes.clear();
@@ -260,17 +249,5 @@ std::vector<openhd::Setting> HailoFollowBridge::get_all_settings() {
         def.mavlink_id,
         openhd::IntSetting{mavlink_default, change_cb, get_cb}});
   }
-  // DF_AVAIL_IDS: read-only string — comma-separated tracking IDs currently
-  // visible in frame. Updated by the Python app's periodic report; read by
-  // QOpenHD's drone follow widget to populate the ID selection list.
-  ret.push_back(openhd::Setting{
-      "DF_AVAIL_IDS",
-      openhd::StringSetting{
-          "",
-          openhd::create_log_only_cb_string(),
-          [this]() -> std::string {
-            std::lock_guard<std::mutex> lock(m_params_mutex);
-            return m_avail_ids_str;
-          }}});
   return ret;
 }
