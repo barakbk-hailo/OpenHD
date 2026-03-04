@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# OpenHD Native Build Script (RPi5 / x86)
+# OpenHD Native Build Script (RPi4 / RPi5 / x86)
 #
 # Run this directly on the target machine. Source repos are expected as sibling
 # directories alongside this repo:
@@ -31,14 +31,19 @@ SYSTEMD_DIR="/etc/systemd/system"
 
 # Detect platform
 ARCH="$(uname -m)"
-case "$ARCH" in
-    aarch64|armv7l) PLATFORM="rpi" ;;
-    x86_64|i686)    PLATFORM="x86" ;;
-    *)
-        echo "Warning: Unknown architecture '$ARCH', assuming x86"
-        PLATFORM="x86"
-        ;;
-esac
+if [ -f /proc/device-tree/model ]; then
+    MODEL=$(tr -d '\0' < /proc/device-tree/model)
+    case "$MODEL" in
+        *"Raspberry Pi 5"*) PLATFORM="rpi5" ;;
+        *"Raspberry Pi 4"*) PLATFORM="rpi4" ;;
+        *"Raspberry Pi"*)   PLATFORM="rpi"  ;;
+    esac
+elif [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "i686" ]; then
+    PLATFORM="x86"
+else
+    echo "Warning: Unknown platform '$ARCH', assuming x86"
+    PLATFORM="x86"
+fi
 echo "Detected platform: $PLATFORM ($ARCH)"
 
 # Parse options
@@ -56,12 +61,12 @@ cmd_deps() {
     echo "=== Installing build + runtime dependencies ==="
     cd "$SCRIPT_DIR"
 
-    # Build dependencies (install_build_dep.sh uses "rpi5" or "ubuntu-x86")
-    if [ "$PLATFORM" = "rpi" ]; then
-        ./install_build_dep.sh rpi5
-    else
-        ./install_build_dep.sh ubuntu-x86
-    fi
+    # Build dependencies
+    case "$PLATFORM" in
+        rpi5)       ./install_build_dep.sh rpi5 ;;
+        rpi4|rpi)   ./install_build_dep.sh rpi ;;
+        x86)        ./install_build_dep.sh ubuntu-x86 ;;
+    esac
 
     # Runtime dependencies
     apt-get install -y -o Dpkg::Options::='--force-overwrite' --no-install-recommends \
@@ -111,7 +116,7 @@ cmd_build() {
     chmod +x /usr/local/bin/openhd
 
     if [ "$ENABLE_SERVICE" = true ]; then
-        if [ "$PLATFORM" = "rpi" ]; then
+        if [ "$PLATFORM" = "rpi5" ] || [ "$PLATFORM" = "rpi4" ] || [ "$PLATFORM" = "rpi" ]; then
             cp "$SCRIPT_DIR/systemd/openhd_rpi.service" "$SYSTEMD_DIR/openhd.service"
         else
             cp "$SCRIPT_DIR/systemd/openhd.service" "$SYSTEMD_DIR/openhd.service"
@@ -141,7 +146,7 @@ cmd_driver() {
 
     rm -rf "$DRIVER_BUILD_DIR"
 
-    if [ "$PLATFORM" = "rpi" ]; then
+    if [ "$PLATFORM" = "rpi5" ] || [ "$PLATFORM" = "rpi4" ] || [ "$PLATFORM" = "rpi" ]; then
         git clone https://github.com/barakbk-hailo/rtl88x2bu.git "$DRIVER_BUILD_DIR"
     else
         git clone https://github.com/OpenHD/rtl88x2bu.git "$DRIVER_BUILD_DIR"
