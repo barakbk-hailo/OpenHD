@@ -35,6 +35,7 @@
 #include <iostream>
 #include <memory>
 #include <cstdlib>
+#include <sched.h>
 
 #include "openhd_buttons.h"
 #include "openhd_global_constants.hpp"
@@ -186,6 +187,23 @@ static OHDRunOptions parse_run_parameters(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+  // On multi-core platforms, keep CPU#0 free for IRQ handling.
+  // Without this, heavy video pipelines (SW encode, videoscale) can saturate
+  // CPU#0 and starve interrupts, freezing keyboard/mouse/network.
+  {
+    const int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    if (num_cpus >= 4) {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      for (int i = 1; i < num_cpus; i++) {
+        CPU_SET(i, &cpuset);
+      }
+      if (sched_setaffinity(0, sizeof(cpuset), &cpuset) == 0) {
+        fprintf(stderr, "OpenHD: pinned to CPUs 1-%d (CPU#0 reserved for IRQs)\n",
+                num_cpus - 1);
+      }
+    }
+  }
   // OpenHD needs to be run as root!
   OHDUtil::terminate_if_not_root();
   if (OHDFilesystemUtil::exists("/run/openhd/hold.pid")) {

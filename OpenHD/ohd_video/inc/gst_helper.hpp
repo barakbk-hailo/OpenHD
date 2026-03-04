@@ -423,67 +423,53 @@ static std::string createLibcamerasrcStream(const CameraSettings& settings,
   ss << "libcamerasrc ";  // camera_name is not needed for us - we only support
                           // one libcamera at a time. rpi cannot do more than
                           // that anyway.
-  // NOTE: those options require openhd/arducam lbcamera !!
-  // We make sure not to write them out explicitly when default(s) are still in
-  // use
-  const auto rotation_degree = libcamera::get_rotation_degree(settings);
-  if (rotation_degree.has_value()) {
-    ss << "rotation=" << rotation_degree.value() << " ";
+  // Native libcamerasrc properties (kebab-case, available on stock builds)
+  {
+    const auto brightness = libcamera::get_brightness(settings);
+    if (brightness.has_value()) {
+      ss << fmt::format("brightness={} ", brightness.value());
+    }
+    const auto sharpness = libcamera::get_sharpness(settings);
+    if (sharpness.has_value()) {
+      ss << fmt::format("sharpness={} ", sharpness.value());
+    }
+    const auto saturation = libcamera::get_saturation(settings);
+    if (saturation.has_value()) {
+      ss << fmt::format("saturation={} ", saturation.value());
+    }
+    const auto contrast = libcamera::get_contrast(settings);
+    if (contrast.has_value()) {
+      ss << fmt::format("contrast={} ", contrast.value());
+    }
+    if (openhd::validate_rpi_libcamera_ev_value(
+            settings.rpi_libcamera_ev_value) &&
+        settings.rpi_libcamera_ev_value != RPI_LIBCAMERA_DEFAULT_EV) {
+      ss << fmt::format("exposure-value={} ", settings.rpi_libcamera_ev_value);
+    }
+    if (openhd::validate_rpi_libcamera_awb_index(
+            settings.rpi_libcamera_awb_index) &&
+        settings.rpi_libcamera_awb_index != 0) {
+      ss << fmt::format("awb-mode={} ", settings.rpi_libcamera_awb_index);
+    }
+    if (openhd::validate_rpi_libcamera_metering_index(
+            settings.rpi_libcamera_metering_index) &&
+        settings.rpi_libcamera_metering_index != 0) {
+      ss << fmt::format("ae-metering-mode={} ",
+                        settings.rpi_libcamera_metering_index);
+    }
+    if (openhd::validate_rpi_libcamera_exposure_index(
+            settings.rpi_libcamera_exposure_index) &&
+        settings.rpi_libcamera_exposure_index != 0) {
+      ss << fmt::format("ae-exposure-mode={} ",
+                        settings.rpi_libcamera_exposure_index);
+    }
+    if (openhd::validate_rpi_libcamera_shutter_microseconds(
+            settings.rpi_libcamera_shutter_microseconds) &&
+        settings.rpi_libcamera_shutter_microseconds != 0) {
+      ss << fmt::format("exposure-time={} ",
+                        settings.rpi_libcamera_shutter_microseconds);
+    }
   }
-  if (requires_hflip(settings)) {
-    ss << "hflip=1 ";
-  }
-  if (requires_vflip(settings)) {
-    ss << "vflip=1 ";
-  }
-  const auto brightness = libcamera::get_brightness(settings);
-  if (brightness.has_value()) {
-    ss << fmt::format("brightness={} ", brightness.value());
-  }
-  const auto sharpness = libcamera::get_sharpness(settings);
-  if (sharpness.has_value()) {
-    ss << fmt::format("sharpness={} ", sharpness.value());
-  }
-  const auto saturation = libcamera::get_saturation(settings);
-  if (saturation.has_value()) {
-    ss << fmt::format("saturation={} ", saturation.value());
-  }
-  const auto contrast = libcamera::get_contrast(settings);
-  if (contrast.has_value()) {
-    ss << fmt::format("contrast={} ", contrast.value());
-  }
-  if (openhd::validate_rpi_libcamera_ev_value(
-          settings.rpi_libcamera_ev_value) &&
-      settings.rpi_libcamera_ev_value != RPI_LIBCAMERA_DEFAULT_EV) {
-    ss << fmt::format("ev={} ", settings.rpi_libcamera_ev_value);
-  }
-  if (openhd::validate_rpi_libcamera_doenise_index(
-          settings.rpi_libcamera_denoise_index) &&
-      settings.rpi_libcamera_denoise_index != 0) {
-    ss << fmt::format("denoise={} ", settings.rpi_libcamera_denoise_index);
-  }
-  if (openhd::validate_rpi_libcamera_awb_index(
-          settings.rpi_libcamera_awb_index) &&
-      settings.rpi_libcamera_awb_index != 0) {
-    ss << fmt::format("awb={} ", settings.rpi_libcamera_awb_index);
-  }
-  if (openhd::validate_rpi_libcamera_metering_index(
-          settings.rpi_libcamera_metering_index) &&
-      settings.rpi_libcamera_metering_index != 0) {
-    ss << fmt::format("metering={} ", settings.rpi_libcamera_metering_index);
-  }
-  if (openhd::validate_rpi_libcamera_exposure_index(
-          settings.rpi_libcamera_exposure_index) &&
-      settings.rpi_libcamera_exposure_index != 0) {
-    ss << fmt::format("exposure={} ", settings.rpi_libcamera_exposure_index);
-  }
-  if (openhd::validate_rpi_libcamera_shutter_microseconds(
-          settings.rpi_libcamera_shutter_microseconds) &&
-      settings.rpi_libcamera_shutter_microseconds != 0) {
-    ss << fmt::format("shutter={} ",
-                      settings.rpi_libcamera_shutter_microseconds);
-  }
-  // openhd-libcamera specific options end
   ss << " ! ";
   if (settings.streamed_video_format.videoCodec == VideoCodec::H264) {
     const int target_w = settings.streamed_video_format.width;
@@ -524,6 +510,22 @@ static std::string createLibcamerasrcStream(const CameraSettings& settings,
           "caps=video/x-raw,width={},height={},format=NV12,framerate={}/"
           "1,interlace-mode=progressive,colorimetry=bt709 ! ",
           target_w, target_h, target_fps);
+    }
+    // Apply flip/rotation via videoflip (works with stock libcamerasrc)
+    {
+      // method: 0=none, 2=rotate-180, 4=horizontal-flip, 5=vertical-flip
+      int flip_method = -1;
+      if (settings.openhd_flip == OPENHD_FLIP_HORIZONTAL)
+        flip_method = 4;
+      else if (settings.openhd_flip == OPENHD_FLIP_VERTICAL)
+        flip_method = 5;
+      else if (settings.openhd_flip == OPENHD_FLIP_VERTICAL_AND_HORIZONTAL)
+        flip_method = 2;
+      else if (libcamera::get_rotation_degree(settings).value_or(0) == 180)
+        flip_method = 2;
+      if (flip_method >= 0) {
+        ss << fmt::format("videoflip method={} ! ", flip_method);
+      }
     }
     // Tee for SHM passthrough placed after crop+scale so output is always
     // at the target resolution (matches drone_follow --width/--height).

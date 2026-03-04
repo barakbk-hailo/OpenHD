@@ -315,8 +315,16 @@ void GStreamerStream::setup() {
   m_gst_pipeline = gst_parse_launch(pipeline_content.str().c_str(), &error);
   m_console->debug("GStreamerStream::setup() end");
   if (error) {
-    m_console->error("Failed to create pipeline: {}", error->message);
-    return;
+    m_console->error("Pipeline parse issue: {}", error->message);
+    if (!m_gst_pipeline) {
+      m_console->error("Pipeline is NULL — cannot continue");
+      g_error_free(error);
+      return;
+    }
+    // Non-fatal: e.g. unknown property on an element. Pipeline was created and
+    // may still work, so continue with setup.
+    m_console->warn("Continuing despite parse warning");
+    g_error_free(error);
   }
   m_bitrate_ctrl_element = get_dynamic_bitrate_control_element_in_pipeline(
       m_gst_pipeline, *m_camera_holder);
@@ -433,9 +441,17 @@ void GStreamerStream::handle_change_bitrate_request(
   m_curr_dynamic_bitrate_kbits = bitrate_for_encoder_kbits;
   if (m_camera_holder->get_settings().h26x_bitrate_kbits !=
       bitrate_for_encoder_kbits) {
+    // Always update in-memory so the bitrate change loop doesn't see a
+    // mismatch and trigger an endless restart (especially for camera types
+    // without a local encoder, like HAILO_AI).
     m_camera_holder->unsafe_get_settings().h26x_bitrate_kbits =
         bitrate_for_encoder_kbits;
-    m_camera_holder->persist(false);
+    // On RPi5 (SW encode), do not persist — the WFB link's calculated
+    // throughput is too high for x264enc and would overwrite the user's
+    // configured default.
+    if (!OHDPlatform::instance().is_rpi5()) {
+      m_camera_holder->persist(false);
+    }
   }
 }
 
@@ -483,6 +499,11 @@ void GStreamerStream::stream_once() {
   openhd::LinkActionHandler::instance().set_cam_info_status(
       m_camera_holder->get_camera().index, CAM_STATUS_RESTARTING);
   setup();
+  if (!m_gst_pipeline) {
+    m_console->error("setup() failed — pipeline is NULL, retrying in 1s");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    return;
+  }
   if (OHDPlatform::instance().is_x20()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
