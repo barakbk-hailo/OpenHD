@@ -53,6 +53,9 @@ static const std::vector<HailoFollowBridge::ParamDef> PARAM_DEFS = {
     // (auto-selected or operator-locked). 0 = no one in view.
     // QOpenHD uses this alongside DF_FOLLOW_ID to show "AUTO · #N" in the badge.
     {"DF_ACTIVE_ID", "active_id", PT::INT, 0},
+    // DF_BITRATE: video encoding bitrate in kbps for the drone-follow app's
+    // x264enc encoder. Updated by WFB link when variable bitrate is enabled.
+    {"DF_BITRATE", "bitrate_kbps", PT::INT, 3917},
 };
 
 const std::vector<HailoFollowBridge::ParamDef>&
@@ -116,6 +119,12 @@ void HailoFollowBridge::send_param_to_python(const std::string& python_name,
   } catch (const std::exception& e) {
     m_console->warn("Failed to send param to Python: {}", e.what());
   }
+}
+
+void HailoFollowBridge::update_param(const std::string& python_name,
+                                      float value) {
+  set_param(python_name, value);
+  send_param_to_python(python_name, value);
 }
 
 void HailoFollowBridge::set_data_cb(DataCb cb) {

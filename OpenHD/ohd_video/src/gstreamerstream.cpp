@@ -446,12 +446,7 @@ void GStreamerStream::handle_change_bitrate_request(
     // without a local encoder, like HAILO_AI).
     m_camera_holder->unsafe_get_settings().h26x_bitrate_kbits =
         bitrate_for_encoder_kbits;
-    // On RPi5 (SW encode), do not persist — the WFB link's calculated
-    // throughput is too high for x264enc and would overwrite the user's
-    // configured default.
-    if (!OHDPlatform::instance().is_rpi5()) {
-      m_camera_holder->persist(false);
-    }
+    m_camera_holder->persist(false);
   }
 }
 

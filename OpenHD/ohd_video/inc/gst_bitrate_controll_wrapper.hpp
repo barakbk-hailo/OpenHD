@@ -39,6 +39,8 @@
 struct GstBitrateControlElement {
   // Some elements take kbit/s, some take bit/s
   bool takes_kbit = false;
+  // v4l2h264enc uses extra-controls GstStructure instead of a simple property
+  bool use_v4l2_extra_controls = false;
   // the encoder (or similar) element, must not be null
   GstElement* encoder;
   // Not all encoders / elements call the bitrate property "bitrate"
@@ -70,12 +72,24 @@ get_dynamic_bitrate_control_element_in_pipeline(
     ret.encoder = gst_bin_get_by_name(GST_BIN(gst_pipeline), "sunxisrc");
     ret.property_name = "bitrate";
     ret.takes_kbit = true;
+  } else if (camera.requires_rpi_libcamera_pipeline()) {
+    // v4l2h264enc uses V4L2 extra-controls, not a simple GObject property
+    ret.encoder = gst_bin_get_by_name(GST_BIN(gst_pipeline), "rpi_v4l2_encoder");
+    ret.use_v4l2_extra_controls = true;
+    ret.takes_kbit = false;  // V4L2 video_bitrate takes bit/s
   }
   if (ret.encoder == nullptr) {
     openhd::log::get_default()->debug(
         "Cannot find dynamic bitrate control element for camera {}",
         camera.cam_type_as_verbose_string());
     return std::nullopt;
+  }
+  if (ret.use_v4l2_extra_controls) {
+    // v4l2h264enc doesn't expose a simple "bitrate" property — skip read-back
+    openhd::log::get_default()->info(
+        "Got bitrate control (v4l2 extra-controls) for camera {}",
+        camera.cam_type_as_verbose_string());
+    return ret;
   }
   // try fetching the value for testing if it actually works
   gint actual_bits_per_second = -1;
@@ -94,6 +108,17 @@ get_dynamic_bitrate_control_element_in_pipeline(
 
 static bool change_bitrate(const GstBitrateControlElement& ctrl_el,
                            int bitrate_kbits) {
+  if (ctrl_el.use_v4l2_extra_controls) {
+    // v4l2h264enc: set video_bitrate via V4L2 extra-controls ioctl
+    GstStructure* controls = gst_structure_new(
+        "controls", "video_bitrate", G_TYPE_INT,
+        openhd::kbits_to_bits_per_second(bitrate_kbits), NULL);
+    g_object_set(ctrl_el.encoder, "extra-controls", controls, NULL);
+    gst_structure_free(controls);
+    openhd::log::get_default()->debug("Changed bitrate to {} kbit/s (v4l2)",
+                                      bitrate_kbits);
+    return true;
+  }
   const auto bitrate = ctrl_el.takes_kbit
                            ? bitrate_kbits
                            : openhd::kbits_to_bits_per_second(bitrate_kbits);

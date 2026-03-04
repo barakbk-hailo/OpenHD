@@ -77,6 +77,9 @@ WBLinkSettings create_default_wb_stream_settings(
     settings.wb_enable_ldpc = true;
     // There are no single Antenna 88x2eu cards
   }
+  if (OHDPlatform::instance().is_rpi5()) {
+    settings.wb_air_mcs_index = 0;  // MCS0 → 3917 kbps with default FEC
+  }
   return settings;
 }
 }  // namespace openhd

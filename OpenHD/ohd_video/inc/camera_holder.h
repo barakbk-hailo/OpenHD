@@ -245,7 +245,7 @@ class CameraHolder :
       ret.streamed_video_format.width = 1280;
       ret.streamed_video_format.height = 720;
       ret.streamed_video_format.framerate = 30;
-      ret.h26x_bitrate_kbits = 3000;
+      ret.h26x_bitrate_kbits = 3917;
     }
     if (OHDPlatform::instance().is_x20()) {
       // Better choice for the x20

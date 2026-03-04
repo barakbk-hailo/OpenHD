@@ -81,6 +81,10 @@ class HailoFollowBridge {
   using DataCb = std::function<void(std::vector<uint8_t>)>;
   void set_data_cb(DataCb cb);
 
+  // Update a parameter and immediately forward it to the Python app via UDP.
+  // Used by OHDVideoAir to push WFB bitrate recommendations.
+  void update_param(const std::string& python_name, float value);
+
   static constexpr int SEND_PORT = 5510;    // OpenHD -> Python
   static constexpr int LISTEN_PORT = 5511;  // Python -> OpenHD
 

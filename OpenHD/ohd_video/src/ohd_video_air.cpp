@@ -28,6 +28,7 @@
 #include "camera_discovery.h"
 #include "config_paths.h"
 #include "gstaudiostream.h"
+#include "hailo_follow_bridge.h"
 #include "openhd_util_filesystem.h"
 #include "gstreamerstream.h"
 #include "nalu/fragment_helper.h"
@@ -217,8 +218,18 @@ std::vector<openhd::Setting> OHDVideoAir::get_generic_settings() {
   return ret;
 }
 
+void OHDVideoAir::set_hailo_bridge(std::shared_ptr<HailoFollowBridge> bridge) {
+  m_hailo_bridge = std::move(bridge);
+}
+
 void OHDVideoAir::handle_change_bitrate_request(
     openhd::LinkActionHandler::LinkBitrateInformation lb) {
+  // Forward bitrate to drone-follow app's encoder (hailo mode)
+  if (m_hailo_bridge) {
+    m_hailo_bridge->update_param(
+        "bitrate_kbps",
+        static_cast<float>(lb.recommended_encoder_bitrate_kbits));
+  }
   if (m_camera_streams.size() == 1) {
     m_camera_streams[0]->handle_change_bitrate_request(lb);
     return;

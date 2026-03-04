@@ -35,6 +35,7 @@
 #include "openhd_udp.h"
 
 class GstAudioStream;
+class HailoFollowBridge;
 /**
  * Main entry point for OpenHD video streaming for discovered cameras on the air
  * unit. NOTE: Camera(s) and camera settings are local on the air unit, the
@@ -70,6 +71,8 @@ class OHDVideoAir {
   std::vector<openhd::Setting> get_generic_settings();
   // Returns true if the primary camera type is HAILO_AI
   bool is_hailo_ai_active() const;
+  // Forward WFB bitrate recommendations to the drone-follow app's encoder
+  void set_hailo_bridge(std::shared_ptr<HailoFollowBridge> bridge);
   // r.n limited to primary and secondary camera
   static constexpr auto MAX_N_CAMERAS = 2;
   void update_arming_state(bool armed);
@@ -107,6 +110,8 @@ class OHDVideoAir {
   // Optimization for 0 overhead on air when not enabled
   std::atomic_bool m_has_localhost_forwarding_enabled = false;
   bool x_set_camera_type(bool primary, int cam_type);
+  // Optional bridge for forwarding bitrate to drone-follow app (hailo mode)
+  std::shared_ptr<HailoFollowBridge> m_hailo_bridge;
 };
 
 #endif  // OPENHD_VIDEO_OHDVIDEO_H

@@ -349,6 +349,8 @@ int main(int argc, char *argv[]) {
                   std::move(payload));
               link_handle->transmit_detection_data(shared);
             });
+        // Forward WFB bitrate recommendations to the drone-follow app
+        ohd_video_air->set_hailo_bridge(hailo_bridge);
         m_console->info("Hailo follow bridge params + detection stream registered");
       }
     }
