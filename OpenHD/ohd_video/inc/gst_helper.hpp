@@ -29,6 +29,7 @@
 #include <sstream>
 #include <string>
 
+#include "camera.hpp"
 #include "camera_settings.hpp"
 #include "libcamera_iq_helper.h"
 #include "openhd_bitrate.h"
@@ -392,7 +393,28 @@ static std::string create_rpi_hdmi_v4l2_stream(const CameraSettings& settings) {
   return ss.str();
 }
 
+// Returns the ISP output resolution that forces full-sensor readout
+// (binned mode), giving maximum FOV. Similar to Picamera2's "main" stream
+// approach. Returns {0,0} if the camera type is unknown.
+static std::pair<int, int> getFullFovIspResolution(int camera_type) {
+  switch (camera_type) {
+    case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V1_OV5647:
+      return {1296, 972};  // 2x2 binned 2592x1944
+    case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V2_IMX219:
+      return {1640, 1232};  // 2x2 binned 3280x2464
+    case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V3_IMX708:
+    case X_CAM_TYPE_RPI_LIBCAMERA_ARDUCAM_SKYMASTERHDR_IMX708:
+      return {2304, 1296};  // 2x2 binned 4608x2592
+    case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_HQ_IMX477:
+    case X_CAM_TYPE_RPI_LIBCAMERA_ARDUCAM_IMX477M:
+      return {2028, 1520};  // 2x2 binned 4056x3040
+    default:
+      return {0, 0};
+  }
+}
+
 static std::string createLibcamerasrcStream(const CameraSettings& settings,
+                                             int camera_type = 0,
                                              bool hailo_raw_tee = false) {
   using namespace openhd;
   assert(settings.streamed_video_format.isValid());
@@ -464,15 +486,47 @@ static std::string createLibcamerasrcStream(const CameraSettings& settings,
   // openhd-libcamera specific options end
   ss << " ! ";
   if (settings.streamed_video_format.videoCodec == VideoCodec::H264) {
-    // First we set the caps filter(s) on libcamerasrc, this way we control the
-    // format (output by ISP), w,h and fps
-    ss << fmt::format(
-        "capsfilter "
-        "caps=video/x-raw,width={},height={},format=NV12,framerate={}/"
-        "1,interlace-mode=progressive,colorimetry=bt709 ! ",
-        settings.streamed_video_format.width,
-        settings.streamed_video_format.height,
-        settings.streamed_video_format.framerate);
+    const int target_w = settings.streamed_video_format.width;
+    const int target_h = settings.streamed_video_format.height;
+    const int target_fps = settings.streamed_video_format.framerate;
+    auto [fov_w, fov_h] = getFullFovIspResolution(camera_type);
+    // Use full-FOV override when the target fits within the binned mode
+    // and would otherwise cause a cropped sensor mode.
+    const bool use_full_fov = fov_w > 0 && fov_h > 0 &&
+                              fov_w >= target_w && fov_h >= target_h &&
+                              (fov_w != target_w || fov_h != target_h);
+    if (use_full_fov) {
+      // Request full-FOV binned resolution from ISP (HW downscale, free)
+      openhd::log::get_default()->info(
+          "Full-FOV override: ISP {}x{} -> crop+scale to {}x{}",
+          fov_w, fov_h, target_w, target_h);
+      ss << fmt::format(
+          "capsfilter "
+          "caps=video/x-raw,width={},height={},format=NV12,framerate={}/"
+          "1,interlace-mode=progressive,colorimetry=bt709 ! ",
+          fov_w, fov_h, target_fps);
+      // Crop to target aspect ratio (even dimensions for NV12)
+      const int cropped_h = (fov_w * target_h / target_w) & ~1;
+      const int crop_total = fov_h - cropped_h;
+      if (crop_total > 0) {
+        ss << fmt::format("videocrop top={} bottom={} ! ",
+                          crop_total / 2, crop_total - crop_total / 2);
+      }
+      // Scale to target resolution
+      ss << fmt::format(
+          "videoscale ! "
+          "video/x-raw,width={},height={},format=NV12 ! ",
+          target_w, target_h);
+    } else {
+      // Target already matches full-FOV mode or no override available
+      ss << fmt::format(
+          "capsfilter "
+          "caps=video/x-raw,width={},height={},format=NV12,framerate={}/"
+          "1,interlace-mode=progressive,colorimetry=bt709 ! ",
+          target_w, target_h, target_fps);
+    }
+    // Tee for SHM passthrough placed after crop+scale so output is always
+    // at the target resolution (matches drone_follow --width/--height).
     if (hailo_raw_tee) {
       ss << "tee name=raw_t ! queue ! ";
     }

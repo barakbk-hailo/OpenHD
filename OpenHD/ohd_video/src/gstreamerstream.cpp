@@ -41,6 +41,7 @@
 #include "nalu/nalu_helper.h"
 #include "openhd_rtp.h"
 #include "openhd_util.h"
+#include "openhd_util_filesystem.h"
 #include "rpi_hdmi_to_csi_v4l2_helper.h"
 #include "rtp_eof_helper.h"
 #include "x20_cam_helper.h"
@@ -139,7 +140,8 @@ std::string GStreamerStream::create_source_encode_pipeline(
         "Camera requires RPI Libcamera pipeline.");
     const bool hailo_raw_tee = OHDFilesystemUtil::exists(
         std::string(getConfigBasePath()) + "hailo.txt");
-    pipeline << OHDGstHelper::createLibcamerasrcStream(setting, hailo_raw_tee);
+    pipeline << OHDGstHelper::createLibcamerasrcStream(
+        setting, camera.camera_type, hailo_raw_tee);
   } else if (camera.requires_rpi_veye_pipeline()) {
     openhd::log::get_default()->debug("Camera requires RPI Veye pipeline.");
     auto bus = "/dev/video0";
@@ -282,6 +284,8 @@ void GStreamerStream::setup() {
           std::string(getConfigBasePath()) + "hailo.txt") &&
       camera.requires_rpi_libcamera_pipeline();
   if (ADD_HAILO_RAW_PASSTHROUGH) {
+    // Remove stale socket from a previous run — shmsink fails if it exists
+    OHDFilesystemUtil::remove_if_existing(openhd::HAILO_RAW_SHM_SOCKET);
     m_console->info("Hailo raw NV12 passthrough via SHM active");
     pipeline_content << OHDGstHelper::createHailoRawPassthroughBranch(
         openhd::HAILO_RAW_SHM_SOCKET);
