@@ -109,6 +109,9 @@ class GStreamerStream : public CameraStream {
   void x_on_new_rtp_fragmented_frame(
       std::vector<std::shared_ptr<std::vector<uint8_t>>> frame_fragments);
   bool m_last_fu_s_idr = false;
+  // For Hailo AI cameras: detect actual resolution from pipeline caps
+  bool m_resolution_detected = false;
+  void try_detect_stream_resolution();
   bool dirty_use_raw = false;
   std::chrono::steady_clock::time_point m_last_log_streaming_disabled =
       std::chrono::steady_clock::now();

@@ -59,7 +59,10 @@ std::string CameraHolder::imp_serialize(const CameraSettings &data) const {
 
 std::vector<openhd::Setting> CameraHolder::get_all_settings() {
   std::vector<openhd::Setting> ret;
-  if (!OHDPlatform::instance().is_x20()) {
+  // Hailo AI camera receives resolution from the drone pipeline, not
+  // configurable from OpenHD side.
+  if (!OHDPlatform::instance().is_x20() &&
+      m_camera.camera_type != X_CAM_TYPE_HAILO_AI) {
     auto c_width_height_framerate = [this](std::string, std::string value) {
       auto tmp_opt = parse_video_format(value);
       if (tmp_opt.has_value()) {

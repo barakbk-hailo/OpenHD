@@ -412,6 +412,43 @@ void GStreamerStream::cleanup_pipe() {
 
 void GStreamerStream::request_restart() { m_request_restart = true; }
 
+void GStreamerStream::try_detect_stream_resolution() {
+  if (!m_gst_pipeline || m_resolution_detected) return;
+  const auto codec =
+      m_camera_holder->get_settings().streamed_video_format.videoCodec;
+  // GStreamer auto-names the first instance of each element type as
+  // "h264parse0" / "h265parse0". Our pipeline only has one parser.
+  const char* parser_name =
+      (codec == VideoCodec::H265) ? "h265parse0" : "h264parse0";
+  GstElement* parser =
+      gst_bin_get_by_name(GST_BIN(m_gst_pipeline), parser_name);
+  if (!parser) return;
+  GstPad* src_pad = gst_element_get_static_pad(parser, "src");
+  if (src_pad) {
+    GstCaps* caps = gst_pad_get_current_caps(src_pad);
+    if (caps && gst_caps_get_size(caps) > 0) {
+      GstStructure* s = gst_caps_get_structure(caps, 0);
+      int width = 0, height = 0;
+      gst_structure_get_int(s, "width", &width);
+      gst_structure_get_int(s, "height", &height);
+      int fps_n = 0, fps_d = 1;
+      gst_structure_get_fraction(s, "framerate", &fps_n, &fps_d);
+      int fps = (fps_d > 0) ? (fps_n / fps_d) : 0;
+      if (width > 0 && height > 0) {
+        const auto cam_idx = m_camera_holder->get_camera().index;
+        openhd::LinkActionHandler::instance().set_cam_info_resolution(
+            cam_idx, width, height, fps);
+        m_console->info("Detected stream resolution: {}x{}@{}", width, height,
+                        fps);
+        m_resolution_detected = true;
+      }
+    }
+    if (caps) gst_caps_unref(caps);
+    gst_object_unref(src_pad);
+  }
+  gst_object_unref(parser);
+}
+
 void GStreamerStream::handle_change_bitrate_request(
     openhd::LinkActionHandler::LinkBitrateInformation lb) {
   // m_console->debug("handle_change_bitrate_request prev: {} new:{}",
@@ -618,6 +655,14 @@ void GStreamerStream::stream_once() {
         openhd::LinkActionHandler::instance().set_cam_info_status(
             m_camera_holder->get_camera().index, CAM_STATUS_STREAMING);
       }
+      // For Hailo AI (and other external sources), detect the actual
+      // resolution from the parser's negotiated caps once data flows.
+      if (!m_resolution_detected &&
+          (m_camera_holder->get_camera().camera_type == X_CAM_TYPE_HAILO_AI ||
+           m_camera_holder->get_camera().camera_type == X_CAM_TYPE_EXTERNAL ||
+           m_camera_holder->get_camera().camera_type == X_CAM_TYPE_EXTERNAL_IP)) {
+        try_detect_stream_resolution();
+      }
       GstBuffer* buffer = gst_sample_get_buffer(sample);
       // tmp declaration for give sample back early optimization
       std::shared_ptr<std::vector<uint8_t>> fragment_data = nullptr;
@@ -648,6 +693,7 @@ void GStreamerStream::stream_once() {
   stop();
   cleanup_pipe();
   m_frame_fragments.resize(0);
+  m_resolution_detected = false;
   m_console->debug("Terminating pipeline took {}ms",
                    std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::steady_clock::now() - terminate_begin)

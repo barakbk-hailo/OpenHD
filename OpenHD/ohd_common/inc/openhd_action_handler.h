@@ -215,6 +215,20 @@ class LinkActionHandler {
       m_cam_info_cam2.cam_status = status;
     }
   }
+  void set_cam_info_resolution(uint8_t cam_index, uint16_t w, uint16_t h,
+                               uint16_t fps) {
+    if (cam_index == 0) {
+      std::lock_guard<std::mutex> lock(m_cam_info_cam1_mutex);
+      m_cam_info_cam1.stream_w = w;
+      m_cam_info_cam1.stream_h = h;
+      m_cam_info_cam1.stream_fps = fps;
+    } else {
+      std::lock_guard<std::mutex> lock(m_cam_info_cam2_mutex);
+      m_cam_info_cam2.stream_w = w;
+      m_cam_info_cam2.stream_h = h;
+      m_cam_info_cam2.stream_fps = fps;
+    }
+  }
   void set_cam_info_type(uint8_t cam_index, uint8_t type) {
     if (cam_index == 0) {
       std::lock_guard<std::mutex> lock(m_cam_info_cam1_mutex);
