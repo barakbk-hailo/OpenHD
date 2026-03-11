@@ -23,49 +23,100 @@
 
 #include "hailo_follow_bridge.h"
 
+#include <fstream>
+
 #include "include_json.hpp"
 #include "openhd_spdlog_include.h"
 #include "openhd_udp.h"
 
 using PT = HailoFollowBridge::ParamType;
 
-static const std::vector<HailoFollowBridge::ParamDef> PARAM_DEFS = {
-    // Controller config params (FLOAT — scaled ×100 in MAVLink, e.g. 5.0 → 500)
-    {"DF_KP_YAW", "kp_yaw", PT::FLOAT, 5.0f},
-    {"DF_KP_FWD", "kp_forward", PT::FLOAT, 3.0f},
-    {"DF_KP_BACK", "kp_backward", PT::FLOAT, 5.0f},
-    {"DF_MAX_FWD", "max_forward", PT::FLOAT, 2.0f},
-    {"DF_MAX_BACK", "max_backward", PT::FLOAT, 3.0f},
-    {"DF_TGT_DIST", "target_distance_m", PT::FLOAT, 0.0f},  // 0 = disabled
-    {"DF_DZ_H_PCT", "dead_zone_height_percent", PT::FLOAT, 5.0f},
-    {"DF_YAW_ALPHA", "yaw_alpha", PT::FLOAT, 0.3f},
-    {"DF_FWD_ALPHA", "forward_alpha", PT::FLOAT, 0.1f},
-    {"DF_TAKEOFF_M", "takeoff_altitude", PT::FLOAT, 3.0f},
-    // Controller config params (INT — value as-is in MAVLink)
-    {"DF_YAW_ONLY", "yaw_only", PT::INT, 0},
-    {"DF_FIX_ALT", "fixed_altitude", PT::INT, 0},
-    {"DF_SMTH_YAW", "smooth_yaw", PT::INT, 1},
-    {"DF_SMTH_FWD", "smooth_forward", PT::INT, 1},
-    // Follow target control (from follow_server)
-    // DF_FOLLOW_ID: set to a tracking ID to follow, 0 = follow largest, -1 = idle
-    {"DF_FOLLOW_ID", "follow_id", PT::INT, 0},
-    // DF_ACTIVE_ID: read-only — the ID currently being tracked by the Python app
-    // (auto-selected or operator-locked). 0 = no one in view.
-    // QOpenHD uses this alongside DF_FOLLOW_ID to show "AUTO · #N" in the badge.
-    {"DF_ACTIVE_ID", "active_id", PT::INT, 0},
-    // DF_BITRATE: video encoding bitrate in kbps for the drone-follow app's
-    // x264enc encoder. Updated by WFB link when variable bitrate is enabled.
-    {"DF_BITRATE", "bitrate_kbps", PT::INT, 3917},
+// Search paths for df_params.json (first found wins)
+static const std::vector<std::string> SCHEMA_SEARCH_PATHS = {
+    "/usr/local/share/openhd/df_params.json",
+    "/home/pi/hailo-drone-follow/df_params.json",
 };
+
+// Load param definitions from df_params.json.
+// Falls back to a minimal hardcoded set if the file is not found.
+static std::vector<HailoFollowBridge::ParamDef> load_param_defs_from_json(
+    std::shared_ptr<spdlog::logger> console) {
+  std::vector<HailoFollowBridge::ParamDef> defs;
+
+  std::string found_path;
+  for (const auto& path : SCHEMA_SEARCH_PATHS) {
+    std::ifstream f(path);
+    if (f.good()) {
+      found_path = path;
+      break;
+    }
+  }
+
+  if (found_path.empty()) {
+    console->warn("df_params.json not found in any search path, using hardcoded defaults");
+    // Minimal fallback so the bridge still works
+    defs.push_back({"DF_KP_YAW", "kp_yaw", PT::FLOAT, 5.0f});
+    defs.push_back({"DF_KP_FWD", "kp_forward", PT::FLOAT, 3.0f});
+    defs.push_back({"DF_FOLLOW_ID", "follow_id", PT::INT, 0});
+    defs.push_back({"DF_ACTIVE_ID", "active_id", PT::INT, 0});
+    defs.push_back({"DF_BITRATE", "bitrate_kbps", PT::INT, 3917});
+    return defs;
+  }
+
+  try {
+    std::ifstream f(found_path);
+    auto j = nlohmann::json::parse(f);
+    console->info("Loaded df_params.json from {}", found_path);
+
+    for (const auto& p : j["params"]) {
+      HailoFollowBridge::ParamDef def;
+      def.mavlink_id = p["mavlink_id"].get<std::string>();
+      def.python_name = p["id"].get<std::string>();
+
+      const std::string type_str = p["type"].get<std::string>();
+      if (type_str == "float") {
+        def.type = PT::FLOAT;
+        def.default_value = p["default"].get<float>();
+      } else if (type_str == "bool") {
+        def.type = PT::INT;
+        def.default_value = p["default"].get<bool>() ? 1.0f : 0.0f;
+      } else {
+        // int
+        def.type = PT::INT;
+        def.default_value = static_cast<float>(p["default"].get<int>());
+      }
+
+      defs.push_back(def);
+      console->debug("  param: {} -> {} ({})", def.mavlink_id, def.python_name,
+                      type_str);
+    }
+    console->info("Loaded {} param definitions from df_params.json", defs.size());
+  } catch (const std::exception& e) {
+    console->error("Failed to parse df_params.json: {}", e.what());
+    // Return whatever we managed to parse
+  }
+  return defs;
+}
+
+// Cached param defs, loaded once on first access
+static std::vector<HailoFollowBridge::ParamDef> s_param_defs;
+static bool s_param_defs_loaded = false;
 
 const std::vector<HailoFollowBridge::ParamDef>&
 HailoFollowBridge::get_param_defs() {
-  return PARAM_DEFS;
+  // s_param_defs is populated in the constructor before any other access
+  return s_param_defs;
 }
 
 HailoFollowBridge::HailoFollowBridge() {
   m_console = openhd::log::create_or_get("hailo_bridge");
   m_console->info("HailoFollowBridge starting");
+
+  // Load param definitions from df_params.json (once)
+  if (!s_param_defs_loaded) {
+    s_param_defs = load_param_defs_from_json(m_console);
+    s_param_defs_loaded = true;
+  }
 
   // Initialize parameter cache with defaults
   for (const auto& def : get_param_defs()) {
