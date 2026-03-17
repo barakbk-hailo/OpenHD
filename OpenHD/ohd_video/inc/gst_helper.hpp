@@ -395,21 +395,27 @@ static std::string create_rpi_hdmi_v4l2_stream(const CameraSettings& settings) {
 
 // Returns the ISP output resolution that forces full-sensor readout
 // (binned mode), giving maximum FOV. Similar to Picamera2's "main" stream
-// approach. Returns {0,0} if the camera type is unknown.
-static std::pair<int, int> getFullFovIspResolution(int camera_type) {
+// approach. Also returns the maximum framerate the sensor can sustain at
+// that resolution. Returns {0,0,0} if the camera type is unknown.
+struct FullFovMode {
+  int width = 0;
+  int height = 0;
+  int max_fps = 0;  // max framerate the sensor can deliver at this resolution
+};
+static FullFovMode getFullFovIspResolution(int camera_type) {
   switch (camera_type) {
     case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V1_OV5647:
-      return {1296, 972};  // 2x2 binned 2592x1944
+      return {1296, 972, 47};   // 2x2 binned 2592x1944
     case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V2_IMX219:
-      return {1640, 1232};  // 2x2 binned 3280x2464
+      return {1640, 1232, 40};  // 2x2 binned 3280x2464
     case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_V3_IMX708:
     case X_CAM_TYPE_RPI_LIBCAMERA_ARDUCAM_SKYMASTERHDR_IMX708:
-      return {2304, 1296};  // 2x2 binned 4608x2592
+      return {2304, 1296, 56};  // 2x2 binned 4608x2592, max ~56fps
     case X_CAM_TYPE_RPI_LIBCAMERA_RPIF_HQ_IMX477:
     case X_CAM_TYPE_RPI_LIBCAMERA_ARDUCAM_IMX477M:
-      return {2028, 1520};  // 2x2 binned 4056x3040
+      return {2028, 1520, 40};  // 2x2 binned 4056x3040
     default:
-      return {0, 0};
+      return {0, 0, 0};
   }
 }
 
@@ -475,36 +481,69 @@ static std::string createLibcamerasrcStream(const CameraSettings& settings,
     const int target_w = settings.streamed_video_format.width;
     const int target_h = settings.streamed_video_format.height;
     const int target_fps = settings.streamed_video_format.framerate;
-    auto [fov_w, fov_h] = getFullFovIspResolution(camera_type);
-    // Use full-FOV override when the target fits within the binned mode
-    // and would otherwise cause a cropped sensor mode.
-    const bool use_full_fov = fov_w > 0 && fov_h > 0 &&
-                              fov_w >= target_w && fov_h >= target_h &&
-                              (fov_w != target_w || fov_h != target_h);
+    auto fov = getFullFovIspResolution(camera_type);
+    // Use full-FOV override when the target fits within the binned mode,
+    // would otherwise cause a cropped sensor mode, AND the sensor can
+    // sustain the requested framerate at the full-FOV resolution.
+    // E.g. IMX708 2304x1296 maxes out at ~56fps, so 60fps targets must
+    // fall through to let the ISP pick a faster (smaller) sensor mode.
+    const bool use_full_fov = fov.width > 0 && fov.height > 0 &&
+                              fov.width >= target_w && fov.height >= target_h &&
+                              (fov.width != target_w || fov.height != target_h) &&
+                              target_fps <= fov.max_fps;
     if (use_full_fov) {
       // Request full-FOV binned resolution from ISP (HW downscale, free)
       openhd::log::get_default()->info(
           "Full-FOV override: ISP {}x{} -> crop+scale to {}x{}",
-          fov_w, fov_h, target_w, target_h);
+          fov.width, fov.height, target_w, target_h);
       ss << fmt::format(
           "capsfilter "
           "caps=video/x-raw,width={},height={},format=NV12,framerate={}/"
           "1,interlace-mode=progressive,colorimetry=bt709 ! ",
-          fov_w, fov_h, target_fps);
-      // Crop to target aspect ratio (even dimensions for NV12)
-      const int cropped_h = (fov_w * target_h / target_w) & ~1;
-      const int crop_total = fov_h - cropped_h;
-      if (crop_total > 0) {
-        ss << fmt::format("videocrop top={} bottom={} ! ",
-                          crop_total / 2, crop_total - crop_total / 2);
+          fov.width, fov.height, target_fps);
+      // Crop to target aspect ratio (even dimensions for NV12).
+      // Two cases depending on whether source is wider or taller
+      // than the target aspect ratio:
+      //   Source wider  (16:9 → 4:3) → crop left/right
+      //   Source taller (16:9 → 21:9) → crop top/bottom
+      const double src_ar = static_cast<double>(fov.width) / fov.height;
+      const double tgt_ar = static_cast<double>(target_w) / target_h;
+      if (src_ar > tgt_ar + 0.001) {
+        // Source is wider → crop horizontally
+        const int cropped_w = (fov.height * target_w / target_h) & ~1;
+        const int crop_total = fov.width - cropped_w;
+        if (crop_total > 0) {
+          openhd::log::get_default()->info(
+              "AR crop: horizontal {}px (left={}, right={})",
+              crop_total, crop_total / 2, crop_total - crop_total / 2);
+          ss << fmt::format("videocrop left={} right={} ! ",
+                            crop_total / 2, crop_total - crop_total / 2);
+        }
+      } else if (tgt_ar > src_ar + 0.001) {
+        // Source is taller → crop vertically
+        const int cropped_h = (fov.width * target_h / target_w) & ~1;
+        const int crop_total = fov.height - cropped_h;
+        if (crop_total > 0) {
+          openhd::log::get_default()->info(
+              "AR crop: vertical {}px (top={}, bottom={})",
+              crop_total, crop_total / 2, crop_total - crop_total / 2);
+          ss << fmt::format("videocrop top={} bottom={} ! ",
+                            crop_total / 2, crop_total - crop_total / 2);
+        }
       }
-      // Scale to target resolution
+      // Scale to target resolution (uniform after cropping)
       ss << fmt::format(
           "videoscale ! "
           "video/x-raw,width={},height={},format=NV12 ! ",
           target_w, target_h);
     } else {
-      // Target already matches full-FOV mode or no override available
+      // Target already matches full-FOV mode, no override available,
+      // or target framerate exceeds the sensor's max at full-FOV resolution.
+      if (fov.width > 0 && target_fps > fov.max_fps) {
+        openhd::log::get_default()->info(
+            "Skipping full-FOV override: {}fps > max {}fps at {}x{}",
+            target_fps, fov.max_fps, fov.width, fov.height);
+      }
       ss << fmt::format(
           "capsfilter "
           "caps=video/x-raw,width={},height={},format=NV12,framerate={}/"
@@ -900,7 +939,7 @@ static std::string createHailoRawPassthroughBranch(
   // NV12 frame size: 1280*720*1.5 ~ 1.4MB. 10MB fits ~7 frames.
   return fmt::format(
       " raw_t. ! queue leaky=downstream max-size-buffers=2 ! "
-      "shmsink socket-path={} wait-for-connection=false "
+      "shmsink name=hailo_shmsink socket-path={} wait-for-connection=false "
       "shm-size=10000000 perms=438 ",
       shm_socket_path);
 }

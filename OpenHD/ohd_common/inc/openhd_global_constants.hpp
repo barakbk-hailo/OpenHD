@@ -58,6 +58,8 @@ static constexpr auto DETECTION_GROUND_UDP = 5520;
 
 // Hailo passthrough: raw NV12 shared memory socket for drone_follow_app
 static constexpr auto HAILO_RAW_SHM_SOCKET = "/tmp/openhd_raw_video";
+// Sideband metadata file with current SHM resolution (JSON: width, height, fps)
+static constexpr auto HAILO_RAW_SHM_META = "/tmp/openhd_raw_video.meta";
 
 // Where the video stream transmitted via wifibroadcast is made available to
 // QOpenHD to be picked up.

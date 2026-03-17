@@ -289,6 +289,18 @@ void GStreamerStream::setup() {
     m_console->info("Hailo raw NV12 passthrough via SHM active");
     pipeline_content << OHDGstHelper::createHailoRawPassthroughBranch(
         openhd::HAILO_RAW_SHM_SOCKET);
+    // Write sideband metadata so drone_follow can discover the current
+    // resolution without being told via CLI args.  Re-written on every
+    // pipeline restart so it always reflects the active format.
+    {
+      const auto meta = fmt::format(
+          "{{\"width\":{},\"height\":{},\"fps\":{}}}",
+          setting.streamed_video_format.width,
+          setting.streamed_video_format.height,
+          setting.streamed_video_format.framerate);
+      OHDFilesystemUtil::write_file(openhd::HAILO_RAW_SHM_META, meta);
+      m_console->info("Wrote SHM metadata: {}", meta);
+    }
   }
   {
     const auto index = m_camera_holder->get_camera().index;
@@ -371,6 +383,23 @@ void GStreamerStream::cleanup_pipe() {
   }
   // As well as the appsink (always exists)
   openhd::unref_appsink_element(m_app_sink_element);
+  // Detach the shmsink branch before tearing down the full pipeline.
+  // An active shmsrc consumer (drone-follow) can keep the shared memory
+  // region mapped, which may cause shmsink's NULL transition to block.
+  // Setting the shmsink element to NULL individually first and removing
+  // the socket prevents the full pipeline NULL from hanging.
+  {
+    GstElement* shmsink =
+        gst_bin_get_by_name(GST_BIN(m_gst_pipeline), "hailo_shmsink");
+    if (shmsink) {
+      m_console->debug("Detaching shmsink before pipeline teardown");
+      gst_element_set_state(shmsink, GST_STATE_NULL);
+      gst_object_unref(shmsink);
+      // Remove the socket so a stale shmsrc consumer errors out immediately
+      // and stops holding the SHM region.
+      OHDFilesystemUtil::remove_if_existing(openhd::HAILO_RAW_SHM_SOCKET);
+    }
+  }
   // Jan 22: Confirmed this hangs quite a lot of pipeline(s) - removed for that
   // reason
   /*m_console->debug("send EOS begin");
