@@ -541,8 +541,25 @@ MavlinkParameterReceiver::update_existing_server_param(const std::string& name,
   ParamValue param_value;
   param_value.set(value);
   auto res = _param_set.update_existing_parameter(name, param_value);
-  if (res == MavlinkParameterSet::UpdateExistingParamResult::SUCCESS)
+  if (res == MavlinkParameterSet::UpdateExistingParamResult::SUCCESS) {
+    // Broadcast an unsolicited PARAM_VALUE so GCS clients (QOpenHD) learn
+    // about server-side changes. Without this, external owners that push
+    // values in via XMavlinkParamProvider's get_callback poll (e.g. the
+    // HailoFollowBridge / drone-follow Python process) update the server
+    // cache silently and the GCS slider stays stale. Same WorkItem pattern
+    // used by process_param_set_internally on SUCCESS.
+    const auto updated = _param_set.lookup_parameter(name, /*extended=*/false);
+    if (updated.has_value()) {
+      const auto param_count =
+          _param_set.get_current_parameters_count(/*extended=*/false);
+      auto new_work = std::make_shared<WorkItem>(
+          updated->param_id, updated->value,
+          WorkItemValue{updated->param_index, param_count,
+                        /*extended=*/false});
+      _work_queue.push_back(new_work);
+    }
     return MavlinkParameterReceiver::Result::Success;
+  }
   return MavlinkParameterReceiver::Result::NotFound;
 }
 
