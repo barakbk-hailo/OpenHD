@@ -146,11 +146,20 @@ cmd_driver() {
 
     rm -rf "$DRIVER_BUILD_DIR"
 
+    # The driver Makefile picks build flags from a CONFIG_PLATFORM_* default
+    # baked into the source tree. Two branches on giladnah/rtl88x2bu carry
+    # the right defaults:
+    #   master-hailo  → CONFIG_PLATFORM_ARM_RPI=y (Raspberry Pi)
+    #   x86-hailo     → CONFIG_PLATFORM_I386_PC=y (x86_64 ground station)
+    # Don't collapse these to a single branch — building with the wrong
+    # default fails with "unrecognized command-line option '-mlittle-endian'"
+    # / "-mabi=apcs-gnu" because the Makefile passes ARM-only flags to gcc.
     if [ "$PLATFORM" = "rpi5" ] || [ "$PLATFORM" = "rpi4" ] || [ "$PLATFORM" = "rpi" ]; then
-        git clone -b master-hailo https://github.com/giladnah/rtl88x2bu.git "$DRIVER_BUILD_DIR"
+        DRIVER_BRANCH="master-hailo"
     else
-        git clone -b master-hailo https://github.com/giladnah/rtl88x2bu.git "$DRIVER_BUILD_DIR"
+        DRIVER_BRANCH="x86-hailo"
     fi
+    git clone -b "$DRIVER_BRANCH" https://github.com/giladnah/rtl88x2bu.git "$DRIVER_BUILD_DIR"
 
     cd "$DRIVER_BUILD_DIR"
     make -j$(nproc)
