@@ -147,9 +147,9 @@ cmd_driver() {
     rm -rf "$DRIVER_BUILD_DIR"
 
     if [ "$PLATFORM" = "rpi5" ] || [ "$PLATFORM" = "rpi4" ] || [ "$PLATFORM" = "rpi" ]; then
-        git clone https://github.com/barakbk-hailo/rtl88x2bu.git "$DRIVER_BUILD_DIR"
+        git clone -b master-hailo https://github.com/giladnah/rtl88x2bu.git "$DRIVER_BUILD_DIR"
     else
-        git clone https://github.com/OpenHD/rtl88x2bu.git "$DRIVER_BUILD_DIR"
+        git clone -b master-hailo https://github.com/giladnah/rtl88x2bu.git "$DRIVER_BUILD_DIR"
     fi
 
     cd "$DRIVER_BUILD_DIR"
