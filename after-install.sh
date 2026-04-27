@@ -51,7 +51,7 @@ if [ "$(uname -m)" == "x86_64" ]; then
             whiptail --title "OpenHD" --yesno "You are about to install OpenHD Drivers. Continue ?" 10 50
             if [ $? -eq 0 ]; then
             whiptail --title "Installing drivers" --msgbox "Installing drivers..." 10 50
-            git clone https://github.com/OpenHD/rtl88x2bu /usr/src/rtl88x2bu-5.13.1
+            git clone -b master-hailo https://github.com/giladnah/rtl88x2bu.git /usr/src/rtl88x2bu-5.13.1
             git clone https://github.com/OpenHD/rtl8812au /usr/src/rtl8812au-git
             echo "Installing RTL8812AU..."
             cd /usr/src/rtl8812au-git

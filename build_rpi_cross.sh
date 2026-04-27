@@ -164,7 +164,7 @@ cmd_setup() {
     sudo chroot "$MOUNT_DIR" /bin/bash -c "
         set -e
         apt-get install -y --no-install-recommends dkms linux-headers-\$(uname -r) || true
-        git clone https://github.com/barakbk-hailo/rtl88x2bu.git /tmp/rtl88x2bu
+        git clone -b master-hailo https://github.com/giladnah/rtl88x2bu.git /tmp/rtl88x2bu
         cd /tmp/rtl88x2bu
         make -j\$(nproc)
         make install
