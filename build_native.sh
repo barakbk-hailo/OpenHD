@@ -139,30 +139,47 @@ cmd_build() {
 }
 
 cmd_driver() {
-    echo "=== Building WiFi driver (rtl88x2bu) ==="
+    echo "=== Building WiFi driver (rtl88x2bu via DKMS) ==="
 
-    # Need kernel headers
-    apt-get install -y --no-install-recommends linux-headers-$(uname -r) || true
+    # Kernel headers + dkms so the module auto-rebuilds on every kernel upgrade
+    # (without DKMS, an apt upgrade that bumps the kernel silently breaks WFB).
+    apt-get install -y --no-install-recommends linux-headers-$(uname -r) dkms || true
 
-    rm -rf "$DRIVER_BUILD_DIR"
-
+    # Source must live in /usr/src/<package>-<version>/ for DKMS to find it
+    # again when a new kernel arrives. AUTOINSTALL=yes in the upstream
+    # dkms.conf takes care of the post-kernel-upgrade rebuild.
+    local VERSION="5.13.1-ohd"
+    local SRC_DIR="/usr/src/rtl88x2bu-${VERSION}"
+    local REPO_URL
     if [ "$PLATFORM" = "rpi5" ] || [ "$PLATFORM" = "rpi4" ] || [ "$PLATFORM" = "rpi" ]; then
-        git clone https://github.com/barakbk-hailo/rtl88x2bu.git "$DRIVER_BUILD_DIR"
+        REPO_URL="https://github.com/barakbk-hailo/rtl88x2bu.git"
     else
-        git clone https://github.com/OpenHD/rtl88x2bu.git "$DRIVER_BUILD_DIR"
+        REPO_URL="https://github.com/OpenHD/rtl88x2bu.git"
     fi
 
-    cd "$DRIVER_BUILD_DIR"
-    make -j$(nproc)
-    make install
+    # Idempotent: drop any previous DKMS registration before re-adding.
+    dkms status -m rtl88x2bu 2>/dev/null | awk -F'[ ,/]' '/rtl88x2bu/{print $2}' | sort -u | while read v; do
+        [ -n "$v" ] && dkms remove "rtl88x2bu/$v" --all 2>/dev/null || true
+    done
+
+    rm -rf "$SRC_DIR" "$DRIVER_BUILD_DIR"
+    git clone "$REPO_URL" "$SRC_DIR"
+    # Upstream dkms.conf has @PKGVER@ as a sed-substitution placeholder.
+    sed -i "s/@PKGVER@/${VERSION}/" "$SRC_DIR/dkms.conf"
+
+    dkms add "rtl88x2bu/${VERSION}"
+    # --force: overwrite any stale 88x2bu_ohd.ko left behind by a previous
+    # non-DKMS install. Same major version + git-SHA suffix means DKMS can't
+    # compare them as monotonic versions and refuses without --force.
+    dkms install --force "rtl88x2bu/${VERSION}"
     depmod -a
 
     # Blacklist stock driver so our _ohd version loads
     echo "blacklist rtw88_8822bu" > /etc/modprobe.d/rtw8822bu.conf
 
-    rm -rf "$DRIVER_BUILD_DIR"
     echo ""
-    echo "=== WiFi driver installed. Reboot for it to load. ==="
+    echo "=== rtl88x2bu_ohd installed via DKMS — auto-rebuilds on kernel upgrades ==="
+    dkms status -m rtl88x2bu 2>&1 | sed 's/^/  /'
 }
 
 cmd_all() {

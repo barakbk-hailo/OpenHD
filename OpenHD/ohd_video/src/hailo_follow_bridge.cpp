@@ -24,6 +24,7 @@
 #include "hailo_follow_bridge.h"
 
 #include <fstream>
+#include <pwd.h>
 
 #include "include_json.hpp"
 #include "openhd_spdlog_include.h"
@@ -31,11 +32,28 @@
 
 using PT = HailoFollowBridge::ParamType;
 
+// Resolve the real (non-root) user's home directory.
+// OpenHD runs under sudo, so $HOME is /root. Use $SUDO_USER to find the
+// invoking user, then look up their home via /etc/passwd.
+static std::string get_real_user_home() {
+  const char* sudo_user = std::getenv("SUDO_USER");
+  if (sudo_user) {
+    struct passwd* pw = getpwnam(sudo_user);
+    if (pw && pw->pw_dir) return pw->pw_dir;
+  }
+  // Fallback: try HOME (works when not under sudo)
+  const char* home = std::getenv("HOME");
+  if (home) return home;
+  return "/home/pi";  // last resort
+}
+
 // Search paths for df_params.json (first found wins)
-static const std::vector<std::string> SCHEMA_SEARCH_PATHS = {
+static std::vector<std::string> build_schema_search_paths() {
+  return {
     "/usr/local/share/openhd/df_params.json",
-    "/home/pi/hailo-drone-follow/df_params.json",
-};
+    get_real_user_home() + "/hailo-drone-follow/df_params.json",
+  };
+}
 
 // Load param definitions from df_params.json.
 // Falls back to a minimal hardcoded set if the file is not found.
@@ -44,7 +62,8 @@ static std::vector<HailoFollowBridge::ParamDef> load_param_defs_from_json(
   std::vector<HailoFollowBridge::ParamDef> defs;
 
   std::string found_path;
-  for (const auto& path : SCHEMA_SEARCH_PATHS) {
+  const auto search_paths = build_schema_search_paths();
+  for (const auto& path : search_paths) {
     std::ifstream f(path);
     if (f.good()) {
       found_path = path;

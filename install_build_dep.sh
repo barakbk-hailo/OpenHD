@@ -33,8 +33,21 @@ BUILD_PACKAGES="git build-essential autotools-dev automake libtool python3-pip a
 
 
 function install_pi_packages {
-PLATFORM_PACKAGES="libcamera-openhd"
-PLATFORM_PACKAGES_REMOVE="python3-libcamera libcamera0"
+# libcamera-openhd is published in the OpenHD cloudsmith repo only for
+# Bullseye/Bookworm. On Trixie (Debian 13) and later, use the upstream
+# libcamera packages — the patches the OpenHD fork carried have been
+# integrated upstream by then. Same package set as the rpi5 branch.
+_codename="$(. /etc/os-release 2>/dev/null && echo "${VERSION_CODENAME}")"
+case "$_codename" in
+    trixie|forky|sid)
+        PLATFORM_PACKAGES="libcamera-dev libcamera-apps gstreamer1.0-libcamera"
+        PLATFORM_PACKAGES_REMOVE=""
+        ;;
+    *)
+        PLATFORM_PACKAGES="libcamera-openhd"
+        PLATFORM_PACKAGES_REMOVE="python3-libcamera libcamera0"
+        ;;
+esac
 }
 function install_x86_packages {
 PLATFORM_PACKAGES="libunwind-dev gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly"
