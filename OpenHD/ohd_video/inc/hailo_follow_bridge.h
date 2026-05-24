@@ -112,6 +112,11 @@ class HailoFollowBridge {
   };
   std::vector<BboxEntry> m_pending_bboxes;
   uint16_t m_pending_active_id = 0;
+  // Follow mode from the Python report — emitted in the v4 binary payload's
+  // byte-5 slot. 0=AUTO, 1=LOCKED, 2=SEARCH, 3=IDLE. Older Python that
+  // doesn't send "mode" leaves this at 0; the wire byte then conveys AUTO,
+  // which is what v3-era ground stations had to assume anyway.
+  uint8_t m_pending_mode = 0;
 
   // Callback to emit detection data payloads via wfb stream
   DataCb m_data_cb;
