@@ -187,11 +187,12 @@ void HailoFollowBridge::emit_data_if_cb_set() {
   // m_params_mutex already held by caller
   if (!m_data_cb) return;
 
-  // Binary payload format v3:
-  //   [0]     version = 3
+  // Binary payload format v4 (v3 grew a mode byte):
+  //   [0]     version = 4
   //   [1-2]   active_id (uint16 LE)
   //   [3-4]   follow_id (int16 LE, -1=idle, 0=auto, N=locked)
-  //   [5]     count (uint8)
+  //   [5]     mode      (uint8: 0=AUTO, 1=LOCKED, 2=SEARCH, 3=IDLE)  ◀ v4 addition
+  //   [6]     count (uint8)
   //   Per bbox (11 bytes): id(2) cx(2) cy(2) w(2) h(2) flags(1)
   // Max ~126 bboxes per packet (1400 byte MTU safety margin)
   const uint8_t count = static_cast<uint8_t>(
@@ -201,12 +202,13 @@ void HailoFollowBridge::emit_data_if_cb_set() {
   const int16_t follow_id = fi_it != m_params.end()
       ? static_cast<int16_t>(fi_it->second) : 0;
   std::vector<uint8_t> payload;
-  payload.reserve(6 + count * 11);
-  payload.push_back(3);  // version
+  payload.reserve(7 + count * 11);
+  payload.push_back(4);  // version (v4 — adds mode byte)
   payload.push_back(static_cast<uint8_t>(m_pending_active_id & 0xFF));
   payload.push_back(static_cast<uint8_t>(m_pending_active_id >> 8));
   payload.push_back(static_cast<uint8_t>(static_cast<uint16_t>(follow_id) & 0xFF));
   payload.push_back(static_cast<uint8_t>(static_cast<uint16_t>(follow_id) >> 8));
+  payload.push_back(m_pending_mode);  // 0=AUTO, 1=LOCKED, 2=SEARCH, 3=IDLE
   payload.push_back(count);
   auto push_u16 = [&payload](uint16_t v) {
     payload.push_back(static_cast<uint8_t>(v & 0xFF));
@@ -251,12 +253,29 @@ void HailoFollowBridge::on_udp_data(const uint8_t* data, std::size_t len) {
     if (j.contains("bboxes") && j["bboxes"].is_array()) {
       m_console->debug("bboxes array received, size={}", j["bboxes"].size());
       m_pending_bboxes.clear();
-      // active_id is reported in params["active_id"] (already in m_params)
+      // active_id is reported in params["active_id"] (already in m_params),
+      // OR in the top-level JSON (newer drone-follow Python reports both for
+      // forward compat). Top-level wins when present.
       float active_f = 0.0f;
-      auto it = m_params.find("active_id");
-      if (it != m_params.end()) active_f = it->second;
+      if (j.contains("active_id") && j["active_id"].is_number()) {
+        active_f = j["active_id"].get<float>();
+      } else {
+        auto it = m_params.find("active_id");
+        if (it != m_params.end()) active_f = it->second;
+      }
       m_pending_active_id = static_cast<uint16_t>(
           std::max(0.0f, std::min(65535.0f, active_f)));
+      // Follow mode — sent by drone-follow as a string ("AUTO" / "LOCKED" /
+      // "SEARCH" / "IDLE"). Old Python that omits this stays at AUTO (0)
+      // so v3-era ground stations see no change in behaviour.
+      m_pending_mode = 0;  // default AUTO
+      if (j.contains("mode") && j["mode"].is_string()) {
+        const std::string mode_s = j["mode"].get<std::string>();
+        if      (mode_s == "AUTO")   m_pending_mode = 0;
+        else if (mode_s == "LOCKED") m_pending_mode = 1;
+        else if (mode_s == "SEARCH") m_pending_mode = 2;
+        else if (mode_s == "IDLE")   m_pending_mode = 3;
+      }
       for (const auto& bbox : j["bboxes"]) {
         if (!bbox.is_object()) continue;
         BboxEntry entry{};
